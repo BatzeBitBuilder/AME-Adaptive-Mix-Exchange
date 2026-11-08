@@ -10,6 +10,11 @@ namespace mtm::ui
 {
 using i18n::tr;
 
+namespace
+{
+const juce::Identifier rackTabId ("rackTab");
+}
+
 StripPanel::StripPanel (juce::AudioProcessorValueTreeState& state, MixHub& h, int s)
     : apvts (state), hub (h), slot (s), eqGraph (state, h, s)
 {
@@ -17,32 +22,72 @@ StripPanel::StripPanel (juce::AudioProcessorValueTreeState& state, MixHub& h, in
     addAndMakeVisible (levelVu);
     addAndMakeVisible (grVu);
     addAndMakeVisible (waterfall);
-    sections.reserve (6);   // Zeiger auf Sektionen bleiben gültig
 
-    sections.emplace_back ("INPUT", std::vector<Knob*> { addKnob (pid::inGain, "Gain") });
+    // INPUT
+    input.title = "INPUT";
+    input.knobs = { addKnob (pid::inGain, "Gain") };
+    phaseLToggle = addToggle (pid::phaseL, MTM_TXT ("Ø L"));
+    phaseRToggle = addToggle (pid::phaseR, MTM_TXT ("Ø R"));
 
-    sections.emplace_back ("FILTER", std::vector<Knob*> { addKnob (pid::hpfFreq, "HPF"), addKnob (pid::lpfFreq, "LPF") });
+    // FILTER
+    filter.title = "FILTER";
+    filter.knobs = { addKnob (pid::hpfFreq, "HPF"), addKnob (pid::lpfFreq, "LPF") };
     hpfToggle = addToggle (pid::hpfOn, "HPF");
     lpfToggle = addToggle (pid::lpfOn, "LPF");
 
-    sections.emplace_back ("EQ", std::vector<Knob*> {
-        addKnob (pid::lsFreq, "Low Hz"),  addKnob (pid::lsGain, "Low dB"),
-        addKnob (pid::p1Freq, "Mid1 Hz"), addKnob (pid::p1Gain, "Mid1 dB"), addKnob (pid::p1Q, "Mid1 Q"),
-        addKnob (pid::p2Freq, "Mid2 Hz"), addKnob (pid::p2Gain, "Mid2 dB"), addKnob (pid::p2Q, "Mid2 Q"),
-        addKnob (pid::hsFreq, "High Hz"), addKnob (pid::hsGain, "High dB") });
+    // Rack: Gate
+    {
+        auto& m = addModule (pid::gateOn, [] (const SlotAudioData& d) { return d.gateReductionDb.load (std::memory_order_relaxed); });
+        gateOn = addToggle (pid::gateOn, {});
+        gateMode = addChoice (pid::gateMode, { "Gate", "Expander 1:2", "Expander 1:4" });
+        m.toggles = { gateOn };
+        m.choices = { gateMode };
+        m.knobs = { addKnob (pid::gateThresh, "Thresh"), addKnob (pid::gateRange, "Range"), addKnob (pid::gateAttack, "Attack"),
+                    addKnob (pid::gateHold, "Hold"), addKnob (pid::gateRelease, "Release"), addKnob (pid::gateScHpf, "SC HPF") };
+    }
+    // Rack: Kompressor
+    {
+        auto& m = addModule (pid::compOn, [] (const SlotAudioData& d) { return d.gainReductionDb.load (std::memory_order_relaxed); });
+        compOn = addToggle (pid::compOn, {});
+        compAutoRel = addToggle (pid::compAutoRel, "Auto-Release");
+        m.toggles = { compOn, compAutoRel };
+        m.knobs = { addKnob (pid::compThresh, "Thresh"), addKnob (pid::compRatio, "Ratio"), addKnob (pid::compAttack, "Attack"),
+                    addKnob (pid::compRelease, "Release"), addKnob (pid::compKnee, "Knee"), addKnob (pid::compMakeup, "Makeup"),
+                    addKnob (pid::compMix, "Mix"), addKnob (pid::compScHpf, "SC HPF") };
+    }
+    // Rack: De-Esser
+    {
+        auto& m = addModule (pid::deessOn, [] (const SlotAudioData& d) { return d.deessReductionDb.load (std::memory_order_relaxed); });
+        deessOn = addToggle (pid::deessOn, {});
+        deessListen = addToggle (pid::deessListen, {});
+        deessMode = addChoice (pid::deessMode, { "Split", "Wide" });
+        m.toggles = { deessOn, deessListen };
+        m.choices = { deessMode };
+        m.knobs = { addKnob (pid::deessFreq, "Freq"), addKnob (pid::deessThresh, "Thresh"), addKnob (pid::deessRange, "Range") };
+    }
+    for (int i = 0; i < (int) modules.size(); ++i)
+    {
+        auto& tab = modules[(size_t) i]->tab;
+        tab.setClickingTogglesState (false);
+        tab.onClick = [this, i] { showModule ((Module) i); };
+        tab.getProperties().set ("lamp", false);   // Lampe im Reiter (LookAndFeel)
+        addAndMakeVisible (tab);
+    }
 
-    std::vector<Knob*> compKnobs { addKnob (pid::compThresh, "Thresh"), addKnob (pid::compRatio, "Ratio"),
-                                   addKnob (pid::compAttack, "Attack"), addKnob (pid::compRelease, "Release"),
-                                   addKnob (pid::compMakeup, "Makeup") };
-    compToggle = addToggle (pid::compOn, {});
-    sections.emplace_back ("", std::move (compKnobs), compToggle);
+    // EQ
+    eq.knobs = { addKnob (pid::lsFreq, "Low Hz"),  addKnob (pid::lsGain, "Low dB"),
+                 addKnob (pid::p1Freq, "Mid1 Hz"), addKnob (pid::p1Gain, "Mid1 dB"), addKnob (pid::p1Q, "Mid1 Q"),
+                 addKnob (pid::p2Freq, "Mid2 Hz"), addKnob (pid::p2Gain, "Mid2 dB"), addKnob (pid::p2Q, "Mid2 Q"),
+                 addKnob (pid::hsFreq, "High Hz"), addKnob (pid::hsGain, "High dB") };
+    eq.title = "EQ";
 
-    sections.emplace_back ("OUTPUT", std::vector<Knob*> {
-        addKnob (pid::pan, "Pan"), addKnob (pid::width, "Width"), addKnob (pid::outGain, "Gain") });
+    // OUTPUT
+    output.title = "OUTPUT";
+    output.knobs = { addKnob (pid::pan, "Pan"), addKnob (pid::width, "Width"), addKnob (pid::outGain, "Gain") };
 
+    // ADAPTIV
     reactionKnob = addKnob (pid::reaction, {});
-    sections.emplace_back ("", std::vector<Knob*> { addKnob (pid::amount, "Amount"), reactionKnob });
-    adaptive = &sections.back();
+    adaptive.knobs = { addKnob (pid::amount, "Amount"), reactionKnob };
     aEqToggle   = addToggle (pid::adaptEq, "EQ");
     aHpfToggle  = addToggle (pid::adaptHpf, "HPF");
     aGainToggle = addToggle (pid::adaptGain, "Gain");
@@ -56,14 +101,29 @@ StripPanel::StripPanel (juce::AudioProcessorValueTreeState& state, MixHub& h, in
     addAndMakeVisible (priorityBox);
     priorityAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts, pid::priority, priorityBox);
 
+    const int savedTab = (int) apvts.state.getProperty (rackTabId, (int) Module::Compressor);
+    showModule ((Module) juce::jlimit (0, (int) modules.size() - 1, savedTab));
     updateTexts();
 }
 
 void StripPanel::updateTexts()
 {
-    sections[3].title = tr ("KOMPRESSOR", "COMPRESSOR");
-    sections[5].title = tr ("ADAPTIV", "ADAPTIVE");
-    compToggle->button.setButtonText (tr ("An", "On"));
+    static const std::pair<const char*, const char*> tabNames[] {
+        { "GATE", "GATE" }, { "KOMPRESSOR", "COMPRESSOR" }, { "DE-ESSER", "DE-ESSER" } };
+    for (size_t i = 0; i < modules.size(); ++i)
+        modules[i]->tab.setButtonText (tr (tabNames[i].first, tabNames[i].second));
+
+    for (auto* t : { gateOn, compOn, deessOn })
+        t->button.setButtonText (tr ("An", "On"));
+    deessListen->button.setButtonText (tr ("Abhören", "Listen"));
+    gateMode->box.setTooltip (tr ("Gate: schließt unter dem Threshold um Range. Expander: senkt leise Anteile im Verhältnis 1:2 / 1:4 ab.",
+                                  "Gate: closes by Range below the threshold. Expander: lowers quiet parts with a 1:2 / 1:4 ratio."));
+    deessMode->box.setTooltip (tr ("Split: nur das Zischband wird abgesenkt. Wide: das ganze Signal.",
+                                   "Split: only the sibilance band is reduced. Wide: the whole signal."));
+    phaseLToggle->button.setTooltip (tr ("Phase (Polarität) links umkehren", "Invert phase (polarity) left"));
+    phaseRToggle->button.setTooltip (tr ("Phase (Polarität) rechts umkehren", "Invert phase (polarity) right"));
+
+    adaptive.title = tr ("ADAPTIV", "ADAPTIVE");
     reactionKnob->label.setText (tr ("Ansprechzeit", "Response"), juce::dontSendNotification);
     aBypassToggle->button.setButtonText (tr ("Direkt", "Direct"));
     priorityLabel.setText (tr ("Vorrang", "Priority"), juce::dontSendNotification);
@@ -78,6 +138,8 @@ void StripPanel::updateTexts()
     grVu.setCaption (tr ("Kompressor", "Compressor"));
     waterfall.setCaption (tr ("SPEKTROGRAMM", "SPECTROGRAM"));
     plateCounter = 14;   // Typenschild beim nächsten Meter-Update neu
+    if (! getLocalBounds().isEmpty())
+        resized();       // Breiten der Schalter folgen dem Text
     repaint();
 }
 
@@ -93,6 +155,7 @@ StripPanel::Knob* StripPanel::addKnob (const char* paramId, const juce::String& 
     k->label.setJustificationType (juce::Justification::centred);
     k->label.setFont (fonts::label (15.0f));
     k->label.setColour (juce::Label::textColourId, colours::textDim);
+    k->label.setMinimumHorizontalScale (0.7f);
     addAndMakeVisible (k->slider);
     addAndMakeVisible (k->label);
     k->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, paramId, k->slider);
@@ -114,25 +177,109 @@ StripPanel::Toggle* StripPanel::addToggle (const char* paramId, const juce::Stri
     return raw;
 }
 
-void StripPanel::layoutKnobs (Section& s, juce::Rectangle<int> r)
+StripPanel::Choice* StripPanel::addChoice (const char* paramId, const juce::StringArray& items)
 {
-    s.bounds = r;
-    auto inner = r.reduced (6);
-    inner.removeFromTop (20);   // Titel
-    const int w = s.knobs.empty() ? 0 : inner.getWidth() / (int) s.knobs.size();
-    for (auto* k : s.knobs)
+    auto c = std::make_unique<Choice>();
+    c->box.addItemList (items, 1);
+    addAndMakeVisible (c->box);
+    c->attachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts, paramId, c->box);
+
+    auto* raw = c.get();
+    choices.push_back (std::move (c));
+    return raw;
+}
+
+StripPanel::RackModule& StripPanel::addModule (const char* onParam, std::function<float (const SlotAudioData&)> reduction)
+{
+    auto m = std::make_unique<RackModule>();
+    m->onParam = onParam;
+    m->reduction = std::move (reduction);
+    modules.push_back (std::move (m));
+    return *modules.back();
+}
+
+void StripPanel::showModule (Module m)
+{
+    currentModule = m;
+    apvts.state.setProperty (rackTabId, (int) m, nullptr);
+
+    for (size_t i = 0; i < modules.size(); ++i)
     {
-        auto cell = inner.removeFromLeft (w);
+        auto& mod = *modules[i];
+        const bool vis = (int) i == (int) m;
+        mod.tab.setToggleState (vis, juce::dontSendNotification);
+        for (auto* t : mod.toggles) t->button.setVisible (vis);
+        for (auto* c : mod.choices) c->box.setVisible (vis);
+        for (auto* k : mod.knobs)   { k->slider.setVisible (vis); k->label.setVisible (vis); }
+    }
+    repaint (rackBounds);
+}
+
+void StripPanel::layoutKnobRow (const std::vector<Knob*>& row, juce::Rectangle<int> r)
+{
+    if (row.empty())
+        return;
+    const int w = r.getWidth() / (int) row.size();
+    for (auto* k : row)
+    {
+        auto cell = r.removeFromLeft (w);
         k->label.setBounds (cell.removeFromTop (16));
+        k->slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, juce::jmin (74, cell.getWidth()), 16);
         k->slider.setBounds (cell);
+    }
+}
+
+void StripPanel::layoutRack (juce::Rectangle<int> r)
+{
+    rackBounds = r;
+    auto inner = r.reduced (6);
+
+    // Reiter
+    auto tabs = inner.removeFromTop (24);
+    for (auto& m : modules)
+    {
+        const int w = juce::jmax (78, m->tab.getBestWidthForHeight (24) + 30);
+        m->tab.setBounds (tabs.removeFromLeft (w).reduced (1, 0));
+        m->tab.setConnectedEdges (juce::Button::ConnectedOnLeft | juce::Button::ConnectedOnRight);
+    }
+
+    // Reduktionsanzeige rechts
+    rackMeter = inner.removeFromRight (26).withTrimmedTop (6);
+    inner.removeFromRight (6);
+
+    // Steuerzeile: Schalter + Auswahl je Modul
+    inner.removeFromTop (6);
+    auto ctrl = inner.removeFromTop (24);
+    for (auto& m : modules)
+    {
+        auto c = ctrl;
+        c.removeFromLeft (6);
+        for (auto* t : m->toggles)
+            t->button.setBounds (c.removeFromLeft (juce::jmax (56, juce::roundToInt (juce::GlyphArrangement::getStringWidth (fonts::label (16.0f), t->button.getButtonText())) + 32)));
+        c.removeFromLeft (10);
+        for (auto* ch : m->choices)
+        {
+            ch->box.setBounds (c.removeFromLeft (150).reduced (0, 1));
+            c.removeFromLeft (8);
+        }
+    }
+
+    inner.removeFromTop (4);
+    for (auto& m : modules)
+    {
+        // Knöpfe gleich breit über alle Module (max. 8 je Zeile)
+        const int cellW = inner.getWidth() / 8;
+        auto row = inner.withWidth (cellW * (int) m->knobs.size());
+        layoutKnobRow (m->knobs, row);
     }
 }
 
 void StripPanel::resized()
 {
     auto area = getLocalBounds().reduced (8);
+    constexpr int gap = 6;
 
-    // Rechte Spalte: VU-Meter
+    // Rechte Spalte: VU-Meter, Typenschild, OUTPUT
     auto meterCol = area.removeFromRight (176);
     area.removeFromRight (8);
     levelVu.setBounds (meterCol.removeFromTop (128));
@@ -140,50 +287,65 @@ void StripPanel::resized()
     grVu.setBounds (meterCol.removeFromTop (128));
     meterCol.removeFromTop (10);
     plateArea = meterCol.removeFromTop (150);
+    meterCol.removeFromTop (gap);
+    {
+        output.bounds = meterCol;
+        auto inner = meterCol.reduced (6);
+        inner.removeFromTop (22);
+        const int h = juce::jmin (130, inner.getHeight() / 2);
+        layoutKnobRow ({ output.knobs[0], output.knobs[1] }, inner.removeFromTop (h));
+        inner.removeFromTop (6);
+        layoutKnobRow ({ output.knobs[2] }, inner.removeFromTop (h).withSizeKeepingCentre (88, h));
+        outputSpare = inner;
+    }
 
-    constexpr int gap = 6;
+    // Unten: Adaptiv
     auto row3 = area.removeFromBottom (150);
     area.removeFromBottom (gap);
-    auto row1 = area.removeFromTop (juce::jmin (200, (area.getHeight() - gap) / 2));
+
+    // Oben: INPUT | FILTER | Rack
+    auto row1 = area.removeFromTop (204);
     area.removeFromTop (gap);
-    auto row2 = area;
 
-    auto& input = sections[0];
-    auto& filter = sections[1];
-    auto& eq = sections[2];
-    auto& comp = sections[3];
-    auto& out = sections[4];
-
-    // Zeile 1: Anteile 1 / 2.4 / 5 / 3
-    const float unit = (float) (row1.getWidth() - 3 * gap) / 11.4f;
-    layoutKnobs (input,  row1.removeFromLeft (juce::roundToInt (unit * 1.0f)));  row1.removeFromLeft (gap);
-    layoutKnobs (filter, row1.removeFromLeft (juce::roundToInt (unit * 2.4f)));  row1.removeFromLeft (gap);
-    layoutKnobs (comp,   row1.removeFromLeft (juce::roundToInt (unit * 5.0f)));  row1.removeFromLeft (gap);
-    layoutKnobs (out,    row1);
+    {
+        input.bounds = row1.removeFromLeft (104);
+        auto inner = input.bounds.reduced (6);
+        inner.removeFromTop (22);
+        auto ph = inner.removeFromTop (22);
+        phaseLToggle->button.setBounds (ph.removeFromLeft (ph.getWidth() / 2));
+        phaseRToggle->button.setBounds (ph);
+        inner.removeFromTop (4);
+        layoutKnobRow (input.knobs, inner);
+    }
+    row1.removeFromLeft (gap);
+    {
+        filter.bounds = row1.removeFromLeft (178);
+        auto inner = filter.bounds.reduced (6);
+        auto t = inner.removeFromTop (22);
+        lpfToggle->button.setBounds (t.removeFromRight (56));
+        hpfToggle->button.setBounds (t.removeFromRight (56));
+        inner.removeFromTop (26);
+        layoutKnobRow (filter.knobs, inner);
+    }
+    row1.removeFromLeft (gap);
+    layoutRack (row1);
 
     // EQ: Analyzer, Spektrogramm, Regler
     {
-        eq.bounds = row2;
-        auto inner = row2.reduced (6);
+        eq.bounds = area;
+        auto inner = area.reduced (6);
         inner.removeFromTop (22);
-        auto knobRow = inner.removeFromBottom (108);
-        auto wf = inner.removeFromBottom (62);
+        auto knobRow = inner.removeFromBottom (122);
+        inner.removeFromBottom (4);
+        auto wf = inner.removeFromBottom (58);
         inner.removeFromBottom (4);
         eqGraph.setBounds (inner);
         waterfall.setBounds (wf.withTrimmedLeft (24));   // an Analyzer-Achse ausrichten
-        Section tmp ("", eq.knobs);
-        layoutKnobs (tmp, knobRow.withY (knobRow.getY() - 26).withHeight (knobRow.getHeight() + 26));
+        layoutKnobRow (eq.knobs, knobRow);
     }
 
-    auto fTitle = filter.bounds.reduced (6).removeFromTop (20);
-    lpfToggle->button.setBounds (fTitle.removeFromRight (54));
-    hpfToggle->button.setBounds (fTitle.removeFromRight (54));
-
-    auto cTitle = comp.bounds.reduced (6).removeFromTop (20);
-    comp.toggle->button.setBounds (cTitle.removeFromRight (56));
-
-    // Zeile 3: Adaptiv
-    adaptive->bounds = row3;
+    // Adaptiv
+    adaptive.bounds = row3;
     auto inner = row3.reduced (6);
     auto title = inner.removeFromTop (22);
     title.removeFromLeft (84);
@@ -195,12 +357,7 @@ void StripPanel::resized()
     aFreezeToggle->button.setBounds (title.removeFromLeft (104));
 
     auto knobArea = inner.removeFromLeft (160);
-    for (auto* k : adaptive->knobs)
-    {
-        auto cell = knobArea.removeFromLeft (80);
-        k->label.setBounds (cell.removeFromTop (16));
-        k->slider.setBounds (cell);
-    }
+    layoutKnobRow (adaptive.knobs, knobArea);
 
     inner.removeFromLeft (10);
     auto prioArea = inner.removeFromLeft (150);
@@ -214,13 +371,47 @@ void StripPanel::resized()
 
 void StripPanel::paint (juce::Graphics& g)
 {
-    for (auto& s : sections)
-        drawEngravedPanel (g, s.bounds.toFloat(), s.title);
+    for (auto* s : { &input, &filter, &eq, &output, &adaptive })
+        drawEngravedPanel (g, s->bounds.toFloat(), s->title);
 
+    paintRack (g);
     paintAdaptive (g);
+    paintPlate (g);
+}
 
-    // Typenschild
-    if (! plateArea.isEmpty())
+void StripPanel::paintRack (juce::Graphics& g)
+{
+    if (rackBounds.isEmpty())
+        return;
+
+    drawEngravedPanel (g, rackBounds.toFloat(), {});
+
+    // Reduktionsanzeige (LED-Kette) des sichtbaren Moduls
+    auto r = rackMeter.toFloat();
+    drawDisplayBezel (g, r);
+    auto led = r.reduced (3.0f, 4.0f);
+    auto caption = led.removeFromBottom (12.0f);
+    g.setColour (colours::phosphorDim);
+    g.setFont (fonts::mono (9.0f, true));
+    g.drawText ("GR", caption, juce::Justification::centred);
+
+    const float db = modules.empty() ? 0.0f : modules[(size_t) currentModule]->meterDb;
+    constexpr int segs = 12;            // 2 dB je Segment, 0 … 24 dB
+    const float segH = led.getHeight() / (float) segs;
+    for (int i = 0; i < segs; ++i)
+    {
+        auto sr = led.withY (led.getY() + segH * (float) i).withHeight (segH).reduced (0.0f, 1.0f);
+        const bool on = db > (float) i * 2.0f + 0.25f;
+        g.setColour (on ? maskingColour ((float) i / (float) (segs - 1)) : colours::displayGrid.withAlpha (0.6f));
+        g.fillRect (sr);
+    }
+}
+
+void StripPanel::paintPlate (juce::Graphics& g)
+{
+    if (plateArea.isEmpty())
+        return;
+
     {
         auto r = plateArea.toFloat();
         g.setColour (colours::bakelite);
@@ -341,6 +532,20 @@ void StripPanel::refreshMeters()
         frozen = d->frozen.load();
         bypassed = d->bypassed.load();
         eqGraph.refresh (dt);
+
+        // Rack: Reduktion (Anzeige mit schnellem Anstieg, langsamem Abfall) und Lampen der Reiter
+        for (auto& m : modules)
+        {
+            const float v = m->reduction ? m->reduction (*d) : 0.0f;
+            m->meterDb = v > m->meterDb ? v : juce::jmax (v, m->meterDb - 30.0f * dt);
+            const bool on = m->onParam != nullptr && apvts.getRawParameterValue (m->onParam)->load() > 0.5f;
+            if ((bool) m->tab.getProperties()["lamp"] != on)
+            {
+                m->tab.getProperties().set ("lamp", on);
+                m->tab.repaint();
+            }
+        }
+        repaint (rackMeter.expanded (4));
 
         // Typenschild (2 Hz genügt)
         if (++plateCounter % 15 == 0)

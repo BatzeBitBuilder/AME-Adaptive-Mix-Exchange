@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 #include "PluginEditor.h"
+#include "Settings.h"
 
 using namespace mtm;
 using mtm::i18n::tr;
 namespace col = mtm::ui::colours;
 
-MultiTrackMixEditor::MultiTrackMixEditor (MultiTrackMixProcessor& p)
-    : AudioProcessorEditor (&p), proc (p),
+MainView::MainView (MultiTrackMixProcessor& p)
+    : proc (p),
       strip (p.apvts, p.getHub(), p.getSlot()),
       overview (p.getHub())
 {
@@ -91,18 +92,18 @@ MultiTrackMixEditor::MultiTrackMixEditor (MultiTrackMixProcessor& p)
     updateVisibility();
     sendLookAndFeelChange();   // Kinder, die nach setLookAndFeel hinzugefügt wurden
 
-    setSize (1000, 880);
+    setSize (baseWidth, baseHeight);
     startTimerHz (30);
 }
 
-MultiTrackMixEditor::~MultiTrackMixEditor()
+MainView::~MainView()
 {
     i18n::removeListener (this);
     stopTimer();
     setLookAndFeel (nullptr);
 }
 
-void MultiTrackMixEditor::refillCombo (juce::ComboBox& box, const juce::StringArray& items)
+void MainView::refillCombo (juce::ComboBox& box, const juce::StringArray& items)
 {
     const int sel = box.getSelectedItemIndex();
     box.clear (juce::dontSendNotification);
@@ -110,7 +111,7 @@ void MultiTrackMixEditor::refillCombo (juce::ComboBox& box, const juce::StringAr
     box.setSelectedItemIndex (sel, juce::dontSendNotification);
 }
 
-void MultiTrackMixEditor::updateTexts()
+void MainView::updateTexts()
 {
     modeLabel.setText (tr ("Modus", "Mode"), juce::dontSendNotification);
     roleLabel.setText (tr ("Rolle", "Role"), juce::dontSendNotification);
@@ -139,12 +140,12 @@ void MultiTrackMixEditor::updateTexts()
     repaint();
 }
 
-void MultiTrackMixEditor::languageChanged()
+void MainView::languageChanged()
 {
     updateTexts();
 }
 
-void MultiTrackMixEditor::showHandbook (bool shouldShow)
+void MainView::showHandbook (bool shouldShow)
 {
     manualButton.setToggleState (shouldShow, juce::dontSendNotification);
     handbook.setVisible (shouldShow);
@@ -152,7 +153,7 @@ void MultiTrackMixEditor::showHandbook (bool shouldShow)
         handbook.toFront (false);
 }
 
-void MultiTrackMixEditor::updateVisibility()
+void MainView::updateVisibility()
 {
     const bool master = proc.getMode() == InstanceMode::Master;
 
@@ -174,7 +175,7 @@ void MultiTrackMixEditor::updateVisibility()
     strip.setVisible (! showOverview);
 }
 
-void MultiTrackMixEditor::timerCallback()
+void MainView::timerCallback()
 {
     const auto mode = proc.getMode();
     if (mode != lastMode)
@@ -258,7 +259,7 @@ void MultiTrackMixEditor::timerCallback()
     statusLabel.setColour (juce::Label::textColourId, c);
 }
 
-void MultiTrackMixEditor::paint (juce::Graphics& g)
+void MainView::paint (juce::Graphics& g)
 {
     const auto b = getLocalBounds().toFloat();
 
@@ -311,7 +312,7 @@ void MultiTrackMixEditor::paint (juce::Graphics& g)
         mtm::ui::drawScrew (g, p, 4.0f);
 }
 
-void MultiTrackMixEditor::resized()
+void MainView::resized()
 {
     auto area = getLocalBounds().withTrimmedLeft (cheek).withTrimmedRight (cheek);
     auto header = area.removeFromTop (headerH).reduced (14, 8);
@@ -377,7 +378,7 @@ void MultiTrackMixEditor::resized()
     handbook.setBounds (getLocalBounds().withTrimmedLeft (cheek).withTrimmedRight (cheek).withTrimmedTop (headerH));
 }
 
-void MultiTrackMixEditor::paintLogo (juce::Graphics& g)
+void MainView::paintLogo (juce::Graphics& g)
 {
     auto la = logoArea.toFloat();
     if (la.isEmpty())
@@ -430,4 +431,38 @@ void MultiTrackMixEditor::paintLogo (juce::Graphics& g)
     g.setFont (mtm::ui::fonts::mono (10.0f, true));
     g.drawText ("v" JucePlugin_VersionString, juce::Rectangle<float> (x + 2.0f, cy - 6.0f, la.getRight() - x - 2.0f, 12.0f),
                 juce::Justification::centredLeft);
+}
+
+//==============================================================================
+MultiTrackMixEditor::MultiTrackMixEditor (MultiTrackMixProcessor& p)
+    : AudioProcessorEditor (&p), view (p)
+{
+    addAndMakeVisible (view);
+
+    // frei skalierbar mit festem Seitenverhältnis; zuletzt genutzte Größe gilt für alle Instanzen
+    constexpr int w = MainView::baseWidth, h = MainView::baseHeight;
+    setResizable (true, true);
+    setResizeLimits (w / 2, h / 2, w * 2, h * 2);
+    if (auto* c = getConstrainer())
+        c->setFixedAspectRatio ((double) w / (double) h);
+
+    const float stored = mtm::settings::get ("uiScale", "0.9").getFloatValue();
+    const float s = juce::jlimit (0.5f, 2.0f, stored > 0.0f ? stored : 0.9f);
+    setSize (juce::roundToInt ((float) w * s), juce::roundToInt ((float) h * s));
+}
+
+MultiTrackMixEditor::~MultiTrackMixEditor() = default;
+
+void MultiTrackMixEditor::resized()
+{
+    const float s = (float) getWidth() / (float) MainView::baseWidth;
+    view.setBounds (0, 0, MainView::baseWidth, MainView::baseHeight);
+    view.setTransform (juce::AffineTransform::scale (s));
+
+    if (std::abs (s - scale) > 0.005f)
+    {
+        scale = s;
+        if (isShowing())   // nur Änderungen durch den Nutzer merken
+            mtm::settings::set ("uiScale", juce::String (s, 3));
+    }
 }

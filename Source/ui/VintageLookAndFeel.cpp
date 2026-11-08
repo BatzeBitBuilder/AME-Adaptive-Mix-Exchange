@@ -227,9 +227,26 @@ void VintageLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& 
 
 void VintageLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& b, bool, bool down)
 {
+    auto r = b.getLocalBounds().translated (0, down ? 1 : 0);
+
+    // optionale Kontrolllampe (Reiter im Modul-Rack: Modul an/aus)
+    if (b.getProperties().contains ("lamp"))
+    {
+        const bool on = b.getProperties()["lamp"];
+        auto lamp = juce::Rectangle<float> (7.0f, 7.0f).withCentre ({ (float) r.getX() + 11.0f, (float) r.getCentreY() });
+        if (on)
+        {
+            g.setColour (colours::amberLamp.withAlpha (0.35f));
+            g.fillEllipse (lamp.expanded (2.5f));
+        }
+        g.setColour (on ? colours::amberLamp : juce::Colour (0xff4a3a26));
+        g.fillEllipse (lamp);
+        r.removeFromLeft (16);
+    }
+
     g.setFont (fonts::label (17.0f));
     g.setColour (b.getToggleState() ? colours::amberLamp : colours::cream);
-    g.drawText (b.getButtonText(), b.getLocalBounds().translated (0, down ? 1 : 0), juce::Justification::centred);
+    g.drawText (b.getButtonText(), r, juce::Justification::centred);
 }
 
 void VintageLookAndFeel::drawComboBox (juce::Graphics& g, int w, int h, bool, int, int, int, int, juce::ComboBox& box)

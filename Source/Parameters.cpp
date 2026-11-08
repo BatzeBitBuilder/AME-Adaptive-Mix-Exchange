@@ -94,6 +94,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 
     // Input / Filter
     l.add (makeFloat (pid::inGain,  "Input",   { -24.0f, 24.0f, 0.01f }, 0.0f, "dB"));
+    l.add (makeBool  (pid::phaseL,  "Phase L", false));
+    l.add (makeBool  (pid::phaseR,  "Phase R", false));
     l.add (makeBool  (pid::hpfOn,   "HPF On",  false));
     l.add (makeFloat (pid::hpfFreq, "HPF",     freqRange (20.0f, 1000.0f, 120.0f), 20.0f, "Hz"));
     l.add (makeBool  (pid::lpfOn,   "LPF On",  false));
@@ -121,6 +123,28 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     l.add (makeFloat (pid::compAttack,  "Attack",    [] { Range r { 0.1f, 100.0f }; r.setSkewForCentre (10.0f); return r; }(), 10.0f, "ms"));
     l.add (makeFloat (pid::compRelease, "Release",   [] { Range r { 10.0f, 1000.0f }; r.setSkewForCentre (150.0f); return r; }(), 120.0f, "ms"));
     l.add (makeFloat (pid::compMakeup,  "Makeup",    { 0.0f, 24.0f, 0.01f }, 0.0f, "dB"));
+    l.add (makeFloat (pid::compKnee,    "Knee",      { 0.0f, 18.0f, 0.1f }, 6.0f, "dB"));
+    l.add (makeFloat (pid::compMix,     "Comp Mix",  { 0.0f, 100.0f, 0.1f }, 100.0f, "%"));
+    l.add (makeFloat (pid::compScHpf,   "Comp SC HPF", freqRange (20.0f, 500.0f, 100.0f), 20.0f, "Hz"));
+    l.add (makeBool  (pid::compAutoRel, "Auto Release", false));
+
+    // Gate / Expander
+    l.add (makeBool   (pid::gateOn,      "Gate On", false));
+    l.add (makeChoice (pid::gateMode,    "Gate Mode", { "Gate", "Expander 1:2", "Expander 1:4" }, 0, true));
+    l.add (makeFloat  (pid::gateThresh,  "Gate Threshold", { -80.0f, 0.0f, 0.1f }, -50.0f, "dB"));
+    l.add (makeFloat  (pid::gateRange,   "Gate Range", { 0.0f, 80.0f, 0.1f }, 40.0f, "dB"));
+    l.add (makeFloat  (pid::gateAttack,  "Gate Attack", [] { Range r { 0.05f, 50.0f }; r.setSkewForCentre (2.0f); return r; }(), 0.5f, "ms"));
+    l.add (makeFloat  (pid::gateHold,    "Gate Hold", [] { Range r { 0.0f, 500.0f }; r.setSkewForCentre (50.0f); return r; }(), 30.0f, "ms"));
+    l.add (makeFloat  (pid::gateRelease, "Gate Release", [] { Range r { 5.0f, 2000.0f }; r.setSkewForCentre (150.0f); return r; }(), 150.0f, "ms"));
+    l.add (makeFloat  (pid::gateScHpf,   "Gate SC HPF", freqRange (20.0f, 2000.0f, 150.0f), 20.0f, "Hz"));
+
+    // De-Esser
+    l.add (makeBool   (pid::deessOn,     "De-Esser On", false));
+    l.add (makeChoice (pid::deessMode,   "De-Esser Mode", { "Split", "Wide" }, 0, true));
+    l.add (makeFloat  (pid::deessFreq,   "De-Esser Freq", freqRange (2500.0f, 12000.0f, 6000.0f), 6500.0f, "Hz"));
+    l.add (makeFloat  (pid::deessThresh, "De-Esser Threshold", { -60.0f, 0.0f, 0.1f }, -30.0f, "dB"));
+    l.add (makeFloat  (pid::deessRange,  "De-Esser Range", { 0.0f, 18.0f, 0.1f }, 8.0f, "dB"));
+    l.add (makeBool   (pid::deessListen, "De-Esser Listen", false));
 
     // Output
     l.add (makeFloat (pid::pan,     "Pan",    { -1.0f, 1.0f, 0.01f }, 0.0f, "pan"));

@@ -12,13 +12,16 @@
 #include "ui/HandbookView.h"
 #include "i18n/Lang.h"
 
-class MultiTrackMixEditor : public juce::AudioProcessorEditor,
-                            private juce::Timer,
-                            private mtm::i18n::Listener
+// Gesamte Oberfläche in Basisgröße; der Editor skaliert sie (Fenster frei skalierbar)
+class MainView : public juce::Component,
+                 private juce::Timer,
+                 private mtm::i18n::Listener
 {
 public:
-    explicit MultiTrackMixEditor (MultiTrackMixProcessor&);
-    ~MultiTrackMixEditor() override;
+    static constexpr int baseWidth = 1100, baseHeight = 960;
+
+    explicit MainView (MultiTrackMixProcessor&);
+    ~MainView() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -26,6 +29,7 @@ public:
     // für Tests / Screenshots
     void showHandbook (bool shouldShow);
     mtm::ui::HandbookView& getHandbook() { return handbook; }
+    mtm::ui::StripPanel& getStrip() { return strip; }
 
 private:
     using ComboAttachment  = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
@@ -64,6 +68,27 @@ private:
 
     mtm::InstanceMode lastMode = mtm::InstanceMode::Track;
     int frame = 0;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainView)
+};
+
+class MultiTrackMixEditor : public juce::AudioProcessorEditor
+{
+public:
+    explicit MultiTrackMixEditor (MultiTrackMixProcessor&);
+    ~MultiTrackMixEditor() override;
+
+    void resized() override;
+
+    // für Tests / Screenshots
+    void showHandbook (bool shouldShow)        { view.showHandbook (shouldShow); }
+    mtm::ui::HandbookView& getHandbook()       { return view.getHandbook(); }
+    mtm::ui::StripPanel& getStrip()            { return view.getStrip(); }
+    float getScale() const noexcept            { return scale; }
+
+private:
+    MainView view;
+    float scale = 1.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MultiTrackMixEditor)
 };

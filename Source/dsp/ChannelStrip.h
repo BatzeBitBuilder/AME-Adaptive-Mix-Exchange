@@ -12,7 +12,7 @@
 namespace mtm
 {
 // Signalkette:
-//   processPre:  Input -> HPF/LPF -> EQ (LS, P1, P2, HS) -> Kompressor
+//   processPre:  Input -> Phase -> HPF/LPF -> Gate/Expander -> EQ (LS, P1, P2, HS) -> Kompressor -> De-Esser
 //   [Analyse-Abgriff]
 //   processPost: Adaptiv (HPF, 10 Oktav-Bänder, Gain) -> Width/Pan -> Output
 class ChannelStrip
@@ -21,6 +21,7 @@ public:
     struct Params
     {
         float inGainDb = 0.0f;
+        bool  phaseL = false, phaseR = false;
         bool  hpfOn = false;  float hpfFreq = 20.0f;
         bool  lpfOn = false;  float lpfFreq = 20000.0f;
 
@@ -32,6 +33,16 @@ public:
         bool  compOn = false;
         float compThreshDb = -18.0f, compRatio = 3.0f, compAttackMs = 10.0f,
               compReleaseMs = 120.0f, compMakeupDb = 0.0f;
+        float compKneeDb = 6.0f, compMix = 1.0f, compScHpfHz = 20.0f;   // Sidechain-HPF <= 20 Hz = aus
+        bool  compAutoRelease = false;
+
+        bool  gateOn = false;
+        int   gateMode = 0;          // 0 = Gate, 1 = Expander 1:2, 2 = Expander 1:4
+        float gateThreshDb = -50.0f, gateRangeDb = 40.0f, gateAttackMs = 0.5f, gateHoldMs = 30.0f,
+              gateReleaseMs = 150.0f, gateScHpfHz = 20.0f;
+
+        bool  deessOn = false, deessWide = false, deessListen = false;
+        float deessFreq = 6500.0f, deessThreshDb = -30.0f, deessRangeDb = 8.0f;
 
         // Adaptiv (bereits geglättet und mit Amount skaliert)
         std::array<float, kNumAdaptiveBands> adaptiveCutDb {};
@@ -49,6 +60,8 @@ public:
     void processPost (juce::AudioBuffer<float>& buffer, const Params& p) noexcept;
 
     float getGainReductionDb() const noexcept { return compEnvDb; }
+    float getGateReductionDb() const noexcept { return -gateGainDb; }      // >= 0
+    float getDeessReductionDb() const noexcept { return deessRedDb; }      // >= 0
 
     // Frequenzgang der adaptiven Stufe (für die Anzeige)
     static float getAdaptiveResponseDb (const std::array<float, kNumAdaptiveBands>& cutDb,
@@ -71,8 +84,22 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> hpfF, lpfF;
     std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative>, 4> eqF;
     std::array<juce::SmoothedValue<float>, 4> eqG, eqQ;
-    juce::SmoothedValue<float> inGain, makeup;
-    float compEnvDb = 0.0f;
+    juce::SmoothedValue<float> inGain, makeup, compMixS;
+    float compEnvDb = 0.0f, compFastDb = 0.0f, compSlowDb = 0.0f;
+    Biquad compSc;
+    float compScApplied = -1.0f;
+
+    // Gate / Expander
+    Biquad gateSc;
+    float gateScApplied = -1.0f;
+    float gateDetEnv = 0.0f, gateGainDb = 0.0f;
+    int gateHoldLeft = 0;
+    bool gateOpen = false;
+
+    // De-Esser
+    Biquad deessHp, deessHp2, deessLp, deessLp2;   // Linkwitz-Riley 4. Ordnung (Split)
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> deessF;
+    float deessDetEnv = 0.0f, deessRedDb = 0.0f;
 
     // Adaptiv
     Biquad aHpf;

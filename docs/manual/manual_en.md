@@ -1,6 +1,6 @@
 # AME – Adaptive Mix Exchange
 
-**Operating Manual · Version 0.9.0** · built by **Batze the bit builder**
+**Operating Manual · Version 0.10.0** · built by **Batze the bit builder**
 
 *Every track finds its aim.*
 
@@ -223,7 +223,7 @@ Typical workflow: choose a program → let the song play a few times → compare
 
 ## About AME
 
-**AME – Adaptive Mix Exchange**, version 0.9.0
+**AME – Adaptive Mix Exchange**, version 0.10.0
 
 Built by **Batze the bit builder**.
 

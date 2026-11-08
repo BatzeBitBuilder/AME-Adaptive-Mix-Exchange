@@ -9,6 +9,7 @@
 #include "Roles.h"
 #include "hub/MixHub.h"
 #include "dsp/ChannelStrip.h"
+#include "dsp/StripParams.h"
 #include "dsp/SpectrumAnalyzer.h"
 #include "engine/MixEngine.h"
 #include "engine/RoleClassifier.h"
@@ -64,6 +65,7 @@ private:
     int slot = -1;
     uint32_t instanceId = 0;
 
+    mtm::StripParamReader stripParams;   // nach apvts deklariert
     mtm::ChannelStrip strip;
     mtm::SpectrumAnalyzer analyzer;
     std::unique_ptr<mtm::MixEngine> engine;

@@ -3,7 +3,7 @@
 
 #include "Lang.h"
 
-#include <juce_data_structures/juce_data_structures.h>
+#include "Settings.h"
 #include <atomic>
 
 namespace mtm::i18n
@@ -24,17 +24,6 @@ juce::ListenerList<Listener>& listeners()
     return l;
 }
 
-juce::PropertiesFile::Options settingsOptions()
-{
-    juce::PropertiesFile::Options o;
-    o.applicationName     = "AME";
-    o.folderName          = "AME";
-    o.filenameSuffix      = ".settings";
-    o.osxLibrarySubFolder = "Application Support";
-    o.storageFormat       = juce::PropertiesFile::storeAsXML;
-    return o;
-}
-
 Language systemDefault()
 {
     return juce::SystemStats::getUserLanguage().startsWithIgnoreCase ("de") ? Language::German : Language::English;
@@ -53,14 +42,9 @@ Language current() noexcept
     if (v < 0)
     {
         Language l = systemDefault();
-        try
-        {
-            juce::PropertiesFile file (settingsOptions());
-            const auto stored = file.getValue (kKey);
-            if (stored == "en")      l = Language::English;
-            else if (stored == "de") l = Language::German;
-        }
-        catch (...) {}
+        const auto stored = settings::get (kKey);
+        if (stored == "en")      l = Language::English;
+        else if (stored == "de") l = Language::German;
         int expected = -1;
         s.compare_exchange_strong (expected, (int) l);
         v = s.load (std::memory_order_relaxed);
@@ -75,9 +59,7 @@ void setLanguage (Language l)
 
     state().store ((int) l, std::memory_order_relaxed);
 
-    juce::PropertiesFile file (settingsOptions());
-    file.setValue (kKey, l == Language::English ? "en" : "de");
-    file.saveIfNeeded();
+    settings::set (kKey, l == Language::English ? "en" : "de");
 
     notify();
 }

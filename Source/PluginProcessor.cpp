@@ -11,7 +11,8 @@ MultiTrackMixProcessor::MultiTrackMixProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, nullptr, "MultiTrackMix", createParameterLayout())
+      apvts (*this, nullptr, "MultiTrackMix", createParameterLayout()),
+      stripParams (apvts)
 {
     slot = hub->registerInstance (instanceId);
     lastFreezeCommandGen = hub->freezeCommandGen.load();
@@ -150,24 +151,7 @@ void MultiTrackMixProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     if (getMode() == InstanceMode::Track)
     {
         ChannelStrip::Params p;
-        p.inGainDb = param (pid::inGain);
-        p.hpfOn = param (pid::hpfOn) > 0.5f;  p.hpfFreq = param (pid::hpfFreq);
-        p.lpfOn = param (pid::lpfOn) > 0.5f;  p.lpfFreq = param (pid::lpfFreq);
-
-        p.eqFreq   = { param (pid::lsFreq), param (pid::p1Freq), param (pid::p2Freq), param (pid::hsFreq) };
-        p.eqGainDb = { param (pid::lsGain), param (pid::p1Gain), param (pid::p2Gain), param (pid::hsGain) };
-        p.eqQ      = { 0.707f, param (pid::p1Q), param (pid::p2Q), 0.707f };
-
-        p.compOn        = param (pid::compOn) > 0.5f;
-        p.compThreshDb  = param (pid::compThresh);
-        p.compRatio     = param (pid::compRatio);
-        p.compAttackMs  = param (pid::compAttack);
-        p.compReleaseMs = param (pid::compRelease);
-        p.compMakeupDb  = param (pid::compMakeup);
-
-        p.pan       = param (pid::pan);
-        p.width     = param (pid::width) * 0.01f;
-        p.outGainDb = param (pid::outGain);
+        stripParams.read (p);
 
         strip.processPre (buffer, p);
 
@@ -299,7 +283,10 @@ void MultiTrackMixProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
 
     data->rmsDb.store (juce::Decibels::gainToDecibels (std::sqrt (meterRms), -100.0f));
     data->peakDb.store (juce::Decibels::gainToDecibels (meterPeak, -100.0f));
-    data->gainReductionDb.store (getMode() == InstanceMode::Track ? strip.getGainReductionDb() : 0.0f);
+    const bool track = getMode() == InstanceMode::Track;
+    data->gainReductionDb.store (track ? strip.getGainReductionDb() : 0.0f);
+    data->gateReductionDb.store (track ? strip.getGateReductionDb() : 0.0f, std::memory_order_relaxed);
+    data->deessReductionDb.store (track ? strip.getDeessReductionDb() : 0.0f, std::memory_order_relaxed);
     data->blockCounter.fetch_add (1);
 }
 

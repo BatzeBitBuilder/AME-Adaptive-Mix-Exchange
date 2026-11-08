@@ -33,6 +33,7 @@ void SlotAudioData::reset() noexcept
     rmsDb.store (-100.0f);
     peakDb.store (-100.0f);
     gainReductionDb.store (0.0f);
+    gateReductionDb.store (0.0f); deessReductionDb.store (0.0f); limiterReductionDb.store (0.0f);
     for (auto& b : bandDb)             b.store (-100.0f);
     for (auto& b : bandAvgDb)          b.store (-100.0f);
     for (auto& d : displayDb)          d.store (-100.0f);
@@ -55,7 +56,7 @@ void SlotAudioData::reset() noexcept
 namespace
 {
 // Bei jeder Änderung von HubShared/SlotAudioData erhöhen → verschiedene AME-Versionen teilen keinen Speicher
-constexpr uint32_t kLayoutVersion = 1;
+constexpr uint32_t kLayoutVersion = 2;
 constexpr uint32_t kMagic = 0x414d4548;   // "AMEH"
 
 uint32_t currentPid() noexcept

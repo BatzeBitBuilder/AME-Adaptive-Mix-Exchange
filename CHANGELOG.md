@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.10.0 – 2026-11-08 (Phase, Gate/Expander, De-Esser, Kompressor-Erweiterung, skalierbares Fenster)
+- **Phasenumkehr** Ø L / Ø R in der INPUT-Sektion
+- **Gate / Expander** (neu): Modi Gate (3 dB Hysterese), Expander 1:2, 1:4; Threshold, Range, Attack, Hold, Release, Sidechain-Hochpass
+- **De-Esser** (neu): Frequenz 2,5–12 kHz, Threshold, Range, Modus Split (nur Band, Linkwitz-Riley-Weiche) oder Wide (ganzes Signal), Abhören
+- **Kompressor erweitert**: Knee (0–18 dB), Mix (Parallelkompression), Sidechain-Hochpass, Auto-Release (programmabhängig)
+- Signalkette: Input → Phase → HPF/LPF → Gate → EQ → Kompressor → De-Esser → [Analyse] → Adaptiv → Width/Pan → Output
+- **Modul-Rack** mit Reitern (Gate, Kompressor, De-Esser), Lampe je Reiter = Modul an, LED-Reduktionsanzeige; letzter Reiter wird im Projekt gemerkt
+- **Fenster frei skalierbar** (50–200 %, festes Seitenverhältnis, Basisgröße 1100 × 960, Ecke unten rechts); Größe wird global gespeichert (`uiScale` in AME.settings)
+- OUTPUT-Sektion in die rechte Spalte verlegt
+- Parameter-Werte effizienter gelesen (Zeiger-Cache `StripParamReader`)
+- Benutzer-Einstellungen zentral (`Settings.*`)
+- Alte Live-Sets: neue Parameter mit neutralen Standardwerten (Module aus, Knee 6 dB wie bisher, Mix 100 %)
+- Hub-Layout v2 (Reduktionswerte Gate/De-Esser/Limiter) – v0.9 und v0.10 teilen keinen Hub
+- Smoke-Test: Phase, Gate, Expander, Kompressor (Mix, SC-HPF, Auto-Release), De-Esser
+
 ## 0.9.0 – 2026-11-08 (Roadmap Schritt 6: prozessübergreifender Hub)
 - MixHub liegt jetzt im Named Shared Memory der DAW-Sitzung (Windows `CreateFileMapping` + benannter Mutex, POSIX `shm_open` + robuster Prozess-Mutex) → Instanzen sehen sich auch in getrennten Plug-in-Prozessen (Bitwig-Sandbox, Reaper „separate process“, FL-Bridge …)
 - Sitzung = DAW-Prozess: Hilfsprozesse (Plugin-Host, Audio-Engine, Bridge) werden im Prozessbaum bis zur DAW zurückverfolgt; mehrere gleichzeitig laufende DAWs bleiben getrennt; Override per Umgebungsvariable `AME_HUB_SESSION`

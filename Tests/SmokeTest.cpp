@@ -9,6 +9,7 @@
 #include "engine/Profiles.h"
 #include "engine/RoleClassifier.h"
 #include "RoleSignals.h"
+#include "Settings.h"
 
 using namespace mtm;
 
@@ -58,12 +59,125 @@ static void runBlocks (MultiTrackMixProcessor& p, TestSignal& sig, int blocks)
     }
 }
 
+static juce::Button* findButton (juce::Component& root, const juce::String& textStart)
+{
+    for (auto* c : root.getChildren())
+    {
+        if (auto* b = dynamic_cast<juce::Button*> (c))
+            if (b->getButtonText().startsWith (textStart))
+                return b;
+        if (auto* b = findButton (*c, textStart))
+            return b;
+    }
+    return nullptr;
+}
+
 static void snapshot (juce::Component& c, const juce::File& f)
 {
     auto img = c.createComponentSnapshot (c.getLocalBounds());
     f.deleteFile();
     juce::FileOutputStream os (f);
     juce::PNGImageFormat().writeImageToStream (img, os);
+}
+
+// --- Channelstrip-Module (ab 0.10) ---
+// Pegel (RMS dB) eines Sinus nach dem Strip; optional zweiter Ton
+static float stripRmsDb (ChannelStrip& cs, const ChannelStrip::Params& p, float hz, float amp,
+                         float hz2 = 0.0f, float amp2 = 0.0f, int blocks = 200, float* outLeftSign = nullptr)
+{
+    cs.prepare (48000.0, 2);
+    juce::AudioBuffer<float> buf (2, 512);
+    double ph = 0.0;
+    double sum = 0.0; int n = 0; double corr = 0.0;
+    for (int b = 0; b < blocks; ++b)
+    {
+        for (int i = 0; i < 512; ++i)
+        {
+            const float v = amp * (float) std::sin (juce::MathConstants<double>::twoPi * hz * ph)
+                          + amp2 * (float) std::sin (juce::MathConstants<double>::twoPi * hz2 * ph);
+            buf.setSample (0, i, v);
+            buf.setSample (1, i, v);
+            ph += 1.0 / 48000.0;
+        }
+        juce::AudioBuffer<float> in (buf);
+        cs.processPre (buf, p);
+        cs.processPost (buf, p);
+        if (b >= blocks / 2)
+            for (int i = 0; i < 512; ++i)
+            {
+                const float y = buf.getSample (0, i);
+                CHECK (std::isfinite (y));
+                sum += (double) y * y; ++n;
+                corr += (double) y * in.getSample (0, i);
+            }
+    }
+    if (outLeftSign != nullptr) *outLeftSign = corr >= 0.0 ? 1.0f : -1.0f;
+    return (float) (10.0 * std::log10 (sum / juce::jmax (1, n) + 1.0e-20));
+}
+
+static void testStripModules()
+{
+    std::cout << "Channelstrip-Module:\n";
+    ChannelStrip cs;
+    ChannelStrip::Params base;
+    const float ref = stripRmsDb (cs, base, 1000.0f, 0.1f);
+
+    // Phase
+    {
+        auto p = base; p.phaseL = true;
+        float sign = 0.0f;
+        const float db = stripRmsDb (cs, p, 1000.0f, 0.1f, 0, 0, 100, &sign);
+        CHECK (sign < 0.0f && std::abs (db - ref) < 0.1f);
+    }
+    // Gate: leises Signal (-40 dBFS) unter Threshold -30 → um Range (40 dB) gedämpft, lautes bleibt
+    {
+        auto p = base; p.gateOn = true; p.gateThreshDb = -30.0f; p.gateRangeDb = 40.0f;
+        const float quietRef = stripRmsDb (cs, base, 1000.0f, 0.01f);
+        const float quiet = stripRmsDb (cs, p, 1000.0f, 0.01f);
+        const float loud = stripRmsDb (cs, p, 1000.0f, 0.3f);
+        const float loudRef = stripRmsDb (cs, base, 1000.0f, 0.3f);
+        std::cout << "  Gate: leise " << (quiet - quietRef) << " dB, laut " << (loud - loudRef) << " dB\n";
+        CHECK (quiet - quietRef < -35.0f);
+        CHECK (std::abs (loud - loudRef) < 0.2f);
+        p.gateMode = 1;   // Expander 1:2, 10 dB unter Threshold → ca. -10 dB
+        const float exp = stripRmsDb (cs, p, 1000.0f, 0.01f);      // Spitze −40 dBFS = 10 dB unter Threshold
+        const float expRef = stripRmsDb (cs, base, 1000.0f, 0.01f);
+        std::cout << "  Expander 1:2 (−10 dB unter Thr.): " << (exp - expRef) << " dB\n";
+        CHECK (exp - expRef < -6.0f && exp - expRef > -14.0f);
+    }
+    // Kompressor: Mix 0 = unverändert, Mix 100 = komprimiert; SC-HPF lässt Bass durch
+    {
+        auto p = base; p.compOn = true; p.compThreshDb = -30.0f; p.compRatio = 4.0f;
+        const float wet = stripRmsDb (cs, p, 1000.0f, 0.3f);
+        p.compMix = 0.0f;
+        const float dry = stripRmsDb (cs, p, 1000.0f, 0.3f);
+        const float dryRef = stripRmsDb (cs, base, 1000.0f, 0.3f);
+        p.compMix = 1.0f; p.compScHpfHz = 400.0f;
+        const float bassSc = stripRmsDb (cs, p, 60.0f, 0.3f);
+        p.compScHpfHz = 20.0f;
+        const float bassNoSc = stripRmsDb (cs, p, 60.0f, 0.3f);
+        p.compAutoRelease = true; p.compKneeDb = 0.0f;
+        const float auto_ = stripRmsDb (cs, p, 1000.0f, 0.3f);
+        std::cout << "  Comp: wet " << (wet - dryRef) << " dB, Mix 0 " << (dry - dryRef) << " dB, Bass mit/ohne SC-HPF "
+                  << bassSc << " / " << bassNoSc << " dB\n";
+        CHECK (wet - dryRef < -10.0f);
+        CHECK (std::abs (dry - dryRef) < 0.1f);
+        CHECK (bassSc > bassNoSc + 6.0f);
+        CHECK (auto_ < dryRef - 10.0f);
+    }
+    // De-Esser: 8 kHz wird abgesenkt, 500 Hz (Split) bleibt
+    {
+        auto p = base; p.deessOn = true; p.deessFreq = 6000.0f; p.deessThreshDb = -40.0f; p.deessRangeDb = 10.0f;
+        const float s = stripRmsDb (cs, p, 8000.0f, 0.2f);
+        const float red = cs.getDeessReductionDb();
+        const float sRef = stripRmsDb (cs, base, 8000.0f, 0.2f);
+        const float low = stripRmsDb (cs, p, 500.0f, 0.2f, 8000.0f, 0.2f) ;
+        const float lowRef = stripRmsDb (cs, base, 500.0f, 0.2f, 8000.0f, 0.2f);
+        std::cout << "  De-Esser: 8 kHz " << (s - sRef) << " dB, Mischung " << (low - lowRef) << " dB\n";
+        CHECK (s - sRef < -6.0f && s - sRef > -10.5f);
+        CHECK (low - lowRef > -4.0f && low - lowRef < -0.5f);
+        CHECK (red > 9.0f);
+    }
 }
 
 // --- Schritt 4: Rollenerkennung ---
@@ -276,6 +390,12 @@ int main (int argc, char** argv)
         setenv ("AME_HUB_SESSION", key.toRawUTF8(), 1);
        #endif
     }
+
+    // Einstellungen (Sprache, Fenstergröße, Presets) nicht im echten Benutzerordner
+    const auto settingsDir = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("AMESmokeTestSettings");
+    settingsDir.createDirectory();
+    mtm::settings::setUserDataFolderForTesting (settingsDir);
+    mtm::settings::set ("uiScale", "1.0");   // Screenshots in Basisgröße
 
     if (argc > 1 && juce::String (argv[1]) == "--hub-child")
         return runHubChild();
@@ -511,10 +631,8 @@ int main (int argc, char** argv)
     {
         // Bass-Instanz, Mix-Übersicht aktiv -> Überdeckung des Bass
         std::unique_ptr<juce::AudioProcessorEditor> ed (bass->createEditor());
-        for (auto* c : ed->getChildren())
-            if (auto* b = dynamic_cast<juce::TextButton*> (c))
-                if (b->getButtonText().startsWith ("Mix"))
-                    b->triggerClick();
+        if (auto* b = findButton (*ed, "Mix"))
+            b->triggerClick();
         juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
         snapshot (*ed, outDir.getChildFile ("ui_overview_bass.png"));
     }
@@ -565,6 +683,7 @@ int main (int argc, char** argv)
 
     std::cout << "Rollenerkennung:\n";
     testRoleDetection();
+    testStripModules();
 
     std::cout << (failures == 0 ? "OK" : "FEHLER: " + std::to_string (failures)) << "\n";
     return failures == 0 ? 0 : 1;

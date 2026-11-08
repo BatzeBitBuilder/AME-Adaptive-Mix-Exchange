@@ -52,6 +52,7 @@ struct SlotAudioData
     std::atomic<float> rmsDb { -100.0f };
     std::atomic<float> peakDb { -100.0f };
     std::atomic<float> gainReductionDb { 0.0f };
+    std::atomic<float> gateReductionDb { 0.0f }, deessReductionDb { 0.0f }, limiterReductionDb { 0.0f };
     std::array<std::atomic<float>, kNumAnalysisBands> bandDb {};       // Kurzzeit-Spektrum (Anzeige, adaptiv)
     std::array<std::atomic<float>, kNumAnalysisBands> bandAvgDb {};    // Langzeit-Spektrum (~3 s, Masking)
     std::atomic<uint32_t> analysisCounter { 0 };

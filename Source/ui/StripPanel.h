@@ -4,6 +4,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -15,6 +16,9 @@
 namespace mtm::ui
 {
 // Bedienoberfläche des Channelstrips (Spur-Modus)
+//   oben:   INPUT | FILTER | Modul-Rack (Reiter: Gate, Kompressor, De-Esser …)   | rechts: VU, Typenschild, OUTPUT
+//   Mitte:  EQ mit Analyzer + Spektrogramm
+//   unten:  ADAPTIV
 class StripPanel : public juce::Component
 {
 public:
@@ -25,6 +29,11 @@ public:
     void resized() override;
     void refreshMeters();
     void updateTexts();   // nach Sprachwechsel
+
+    // Rack-Reiter (für Tests / Screenshots)
+    enum class Module { Gate = 0, Compressor, DeEsser, NumModules };
+    void showModule (Module);
+    Module getVisibleModule() const noexcept { return currentModule; }
 
 private:
     struct Knob
@@ -40,21 +49,40 @@ private:
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attachment;
     };
 
+    struct Choice
+    {
+        juce::ComboBox box;
+        std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> attachment;
+    };
+
     struct Section
     {
-        Section (juce::String t, std::vector<Knob*> k, Toggle* tg = nullptr)
-            : title (std::move (t)), knobs (std::move (k)), toggle (tg) {}
-
         juce::String title;
         std::vector<Knob*> knobs;
-        Toggle* toggle = nullptr;
         juce::Rectangle<int> bounds;
+    };
+
+    // Modul im Rack: Reiter, Schalter/Auswahl in der Steuerzeile, Regler, Reduktionsanzeige
+    struct RackModule
+    {
+        juce::TextButton tab;
+        const char* onParam = nullptr;
+        std::vector<Toggle*> toggles;
+        std::vector<Choice*> choices;
+        std::vector<Knob*> knobs;
+        std::function<float (const SlotAudioData&)> reduction;   // dB >= 0
+        float meterDb = 0.0f;
     };
 
     Knob* addKnob (const char* paramId, const juce::String& label);
     Toggle* addToggle (const char* paramId, const juce::String& label);
-    void layoutKnobs (Section&, juce::Rectangle<int>);
+    Choice* addChoice (const char* paramId, const juce::StringArray& items);
+    RackModule& addModule (const char* onParam, std::function<float (const SlotAudioData&)> reduction);
+    void layoutKnobRow (const std::vector<Knob*>&, juce::Rectangle<int>);
+    void layoutRack (juce::Rectangle<int>);
+    void paintRack (juce::Graphics&);
     void paintAdaptive (juce::Graphics&);
+    void paintPlate (juce::Graphics&);
 
     juce::AudioProcessorValueTreeState& apvts;
     MixHub& hub;
@@ -62,13 +90,21 @@ private:
 
     std::vector<std::unique_ptr<Knob>> knobs;
     std::vector<std::unique_ptr<Toggle>> toggles;
-    std::vector<Section> sections;
+    std::vector<std::unique_ptr<Choice>> choices;
 
-    Toggle *hpfToggle = nullptr, *lpfToggle = nullptr, *compToggle = nullptr;
+    Section input, filter, eq, output, adaptive;
+    Toggle *phaseLToggle = nullptr, *phaseRToggle = nullptr;
+    Toggle *hpfToggle = nullptr, *lpfToggle = nullptr;
     Knob* reactionKnob = nullptr;
 
+    // Rack
+    std::vector<std::unique_ptr<RackModule>> modules;
+    Module currentModule = Module::Compressor;
+    juce::Rectangle<int> rackBounds, rackMeter, outputSpare;
+    Toggle *gateOn = nullptr, *compOn = nullptr, *compAutoRel = nullptr, *deessOn = nullptr, *deessListen = nullptr;
+    Choice *gateMode = nullptr, *deessMode = nullptr;
+
     // Adaptiv
-    Section* adaptive = nullptr;
     Toggle *aEqToggle = nullptr, *aHpfToggle = nullptr, *aGainToggle = nullptr,
            *aBypassToggle = nullptr, *aFreezeToggle = nullptr;
     EqGraph eqGraph;
