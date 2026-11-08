@@ -1,6 +1,4 @@
 build/
-build-*/
 out/
 .vs/
 *.user
-CMakeUserPresets.json

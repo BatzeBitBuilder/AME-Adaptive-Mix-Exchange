@@ -1,6 +1,6 @@
 # AME – Adaptive Mix Exchange
 
-**Operating Manual · Version 0.8.0** · built by **Batze the bit builder**
+**Operating Manual · Version 0.8.1** · built by **Batze the bit builder**
 
 *Every track finds its aim.*
 
@@ -220,12 +220,15 @@ Typical workflow: choose a program → let the song play a few times → compare
 
 ## About AME
 
-**AME – Adaptive Mix Exchange**, version 0.8.0
+**AME – Adaptive Mix Exchange**, version 0.8.1
 
 Built by **Batze the bit builder**.
 
 - Framework: JUCE 8 (C++20), VST3 format, Windows / Ableton Live.
 - Fonts: Abril Fatface, Bebas Neue, Courier Prime – SIL Open Font License.
+- **License: GNU Affero General Public License v3 (AGPLv3)** – free, open software. You may use, modify and share AME, also commercially. Anyone distributing a modified version must publish its source code under the AGPLv3 as well. AME comes without any warranty.
+- Source code: [github.com/BatzeBitBuilder/AME-Adaptive-Mix-Exchange](https://github.com/BatzeBitBuilder/AME-Adaptive-Mix-Exchange)
+- Third-party components: JUCE (AGPLv3), VST 3 SDK (MIT, Steinberg), fonts (OFL) – see THIRD_PARTY_NOTICES.md. VST is a trademark of Steinberg Media Technologies GmbH.
 - Name and imagery: a telephone exchange from the valve era – every track is a line, the Exchange is the switchboard.
 
 *Every track finds its aim.*

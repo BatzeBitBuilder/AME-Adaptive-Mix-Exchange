@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1 – 2026-11-08 (Open Source, AGPLv3)
+- Lizenz: GNU AGPLv3 (`LICENSE`), JUCE unter dessen AGPLv3-Option
+- `THIRD_PARTY_NOTICES.md`: JUCE (AGPLv3), VST 3 SDK (MIT), Schriften (OFL), VST-Markenhinweis
+- Copyright-/SPDX-Kopf in allen Quelldateien (`AGPL-3.0-only`)
+- Handbuch/README: Kapitel Lizenz, Link zum Quellcode
+
 ## 0.8.0 – 2026-11-08 (Englische Oberfläche, Handbuch)
 - UI-Sprache Deutsch/Englisch, Umschalter **DE / EN** im Kopf; gilt sofort für alle Instanzen, gespeichert in der Benutzer-Einstellungsdatei (`AME/AME.settings`), erster Start = Systemsprache
 - Alle UI-Texte, Rollen-, Programm-, Vorrang- und Modusnamen zweisprachig (i18n/Lang, `tr("de", "en")`)

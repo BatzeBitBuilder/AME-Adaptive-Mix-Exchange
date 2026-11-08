@@ -71,3 +71,11 @@ Resources/Fonts/      eingebettete Schriften (OFL)
 docs/manual/          Handbuch DE/EN (Markdown, ins Plugin eingebettet) + Screenshots
 Tests/SmokeTest.cpp, Tests/RoleSignals.h
 ```
+
+## Lizenz
+AME ist freie Software unter der **GNU Affero General Public License v3** (`LICENSE`).
+Copyright (C) 2026 Batze the bit builder.
+
+Du darfst AME nutzen, verändern und weitergeben – auch kommerziell. Wer eine (veränderte) Fassung weitergibt, muss den vollständigen Quellcode unter AGPLv3 bereitstellen. Keine Gewährleistung.
+
+JUCE wird unter seiner AGPLv3-Option genutzt; VST 3 SDK (MIT), Schriften (OFL) – siehe `THIRD_PARTY_NOTICES.md`. VST ist eine Marke der Steinberg Media Technologies GmbH.

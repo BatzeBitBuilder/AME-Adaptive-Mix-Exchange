@@ -1,3 +1,6 @@
+// AME – Adaptive Mix Exchange · Copyright (C) 2026 Batze the bit builder
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Kurztest ohne DAW: mehrere Instanzen im selben Prozess, Hub-Kommunikation, DSP, UI-Snapshots.
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "PluginProcessor.h"

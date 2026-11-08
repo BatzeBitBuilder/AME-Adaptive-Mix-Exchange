@@ -1,3 +1,6 @@
+// AME – Adaptive Mix Exchange · Copyright (C) 2026 Batze the bit builder
+// SPDX-License-Identifier: AGPL-3.0-only
+
 #include "MixEngine.h"
 #include "Profiles.h"
 #include "dsp/SpectrumAnalyzer.h"
