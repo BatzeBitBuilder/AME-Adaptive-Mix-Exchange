@@ -37,4 +37,15 @@ const juce::StringArray& getUserScope();
 void applyFactory (juce::AudioProcessorValueTreeState&, const FactoryPreset&);
 void applyValues (juce::AudioProcessorValueTreeState&, const juce::StringArray& scope,
                   const std::vector<std::pair<juce::String, float>>& values, bool resetOthers);
+// --- Eigene Presets: %APPDATA%\AME\Presets\<Name>.amepreset (XML, Klarwerte) ---
+juce::File getUserPresetFolder();
+juce::StringArray getUserPresetNames();                       // alphabetisch
+bool saveUserPreset (juce::AudioProcessorValueTreeState&, const juce::String& name);
+bool loadUserPreset (juce::AudioProcessorValueTreeState&, const juce::String& name);
+bool deleteUserPreset (const juce::String& name);
+
+// --- A/B-Vergleich der Einstellungen (im Projekt gespeichert) ---
+juce::String getActiveAB (const juce::AudioProcessorValueTreeState&);      // "A" oder "B"
+void selectAB (juce::AudioProcessorValueTreeState&, const juce::String& slot);
+void copyActiveToOther (juce::AudioProcessorValueTreeState&);
 } // namespace mtm::presets

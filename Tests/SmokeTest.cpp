@@ -227,6 +227,29 @@ static void testStripModules()
         CHECK (loud < -3.0f);
         CHECK (exc > 0.1f && exc < 6.0f);
     }
+
+    // Limiter / Clipper: +6 dBFS-Sinus → Spitzen <= Ceiling
+    for (int mode = 0; mode < 3; ++mode)
+    {
+        auto p = base; p.limOn = true; p.limMode = mode; p.limCeilingDb = -1.0f;
+        cs.prepare (48000.0, 2);
+        juce::AudioBuffer<float> buf (2, 512);
+        float peak = 0.0f; double ph = 0.0;
+        for (int b = 0; b < 50; ++b)
+        {
+            for (int i = 0; i < 512; ++i, ph += 1.0 / 48000.0)
+                for (int ch = 0; ch < 2; ++ch)
+                    buf.setSample (ch, i, 2.0f * (float) std::sin (juce::MathConstants<double>::twoPi * 200.0 * ph));
+            cs.processPre (buf, p);
+            cs.processPost (buf, p);
+            peak = juce::jmax (peak, buf.getMagnitude (0, 512));
+        }
+        std::cout << "  Limiter-Modus " << mode << ": Spitze " << juce::Decibels::gainToDecibels (peak)
+                  << " dBFS, Reduktion " << cs.getLimiterReductionDb() << " dB\n";
+        CHECK (peak <= juce::Decibels::decibelsToGain (-1.0f) + 1.0e-4f);
+        CHECK (cs.getLimiterReductionDb() > 5.0f);
+    }
+    CHECK (std::abs (ChannelStrip::clip (1, 0.3f, 1.0f) - 0.3f) < 1.0e-6f);   // unter 50 % linear
 }
 
 // --- Schritt 4: Rollenerkennung ---
@@ -760,6 +783,62 @@ int main (int argc, char** argv)
         med->getStrip().showModule (ui::StripPanel::Module::Compressor);
         for (int f = 0; f < 20; ++f) { runAll (1); juce::MessageManager::getInstance()->runDispatchLoopUntil (33); }
         snapshot (*ed, outDir.getChildFile ("ui_track_preset.png"));
+    }
+
+    // Eigene Presets + A/B
+    {
+        auto val = [&] (const char* id) { return vocal->apvts.getRawParameterValue (id)->load(); };
+        setParam (*vocal, pid::compRatio, 7.0f);
+        setParam (*vocal, pid::limOn, 1.0f);
+        setParam (*vocal, pid::outGain, -3.0f);
+        CHECK (presets::saveUserPreset (vocal->apvts, "Test Vox / 1"));
+        CHECK (presets::getUserPresetNames().contains ("Test Vox / 1"));
+        setParam (*vocal, pid::compRatio, 2.0f);
+        setParam (*vocal, pid::limOn, 0.0f);
+        setParam (*vocal, pid::outGain, 0.0f);
+        CHECK (presets::loadUserPreset (vocal->apvts, "Test Vox / 1"));
+        CHECK (std::abs (val (pid::compRatio) - 7.0f) < 0.01f && val (pid::limOn) > 0.5f && std::abs (val (pid::outGain) + 3.0f) < 0.01f);
+
+        // A/B: B startet als Kopie, Änderungen in B, zurück zu A = alter Wert
+        CHECK (presets::getActiveAB (vocal->apvts) == "A");
+        presets::selectAB (vocal->apvts, "B");
+        CHECK (std::abs (val (pid::compRatio) - 7.0f) < 0.01f);
+        setParam (*vocal, pid::compRatio, 12.0f);
+        presets::selectAB (vocal->apvts, "A");
+        CHECK (std::abs (val (pid::compRatio) - 7.0f) < 0.01f);
+        presets::selectAB (vocal->apvts, "B");
+        CHECK (std::abs (val (pid::compRatio) - 12.0f) < 0.01f);
+        presets::copyActiveToOther (vocal->apvts);
+        presets::selectAB (vocal->apvts, "A");
+        CHECK (std::abs (val (pid::compRatio) - 12.0f) < 0.01f);
+
+        // A/B-Zustand wird mit dem Projekt gespeichert
+        juce::MemoryBlock state;
+        vocal->getStateInformation (state);
+        MultiTrackMixProcessor restored;
+        restored.setStateInformation (state.getData(), (int) state.getSize());
+        CHECK (presets::getActiveAB (restored.apvts) == "A");
+        CHECK (restored.apvts.state.getChildWithName ("ABCompare").getChildWithName ("B").isValid());
+
+        CHECK (presets::deleteUserPreset ("Test Vox / 1"));
+        CHECK (! presets::getUserPresetNames().contains ("Test Vox / 1"));
+        std::cout << "  eigene Presets + A/B ok\n";
+
+        // Screenshots: Limiter-Reiter
+        std::unique_ptr<juce::AudioProcessorEditor> ed (vocal->createEditor());
+        auto* med = dynamic_cast<MultiTrackMixEditor*> (ed.get());
+        med->getStrip().showModule (ui::StripPanel::Module::Limiter);
+        for (int f = 0; f < 15; ++f) { runAll (1); juce::MessageManager::getInstance()->runDispatchLoopUntil (33); }
+        snapshot (*ed, outDir.getChildFile ("ui_rack_limiter.png"));
+        med->getStrip().showModule (ui::StripPanel::Module::Saturation);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+        snapshot (*ed, outDir.getChildFile ("ui_rack_saturation.png"));
+        med->getStrip().showModule (ui::StripPanel::Module::Gate);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+        snapshot (*ed, outDir.getChildFile ("ui_rack_gate.png"));
+        med->getStrip().showModule (ui::StripPanel::Module::DeEsser);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+        snapshot (*ed, outDir.getChildFile ("ui_rack_deesser.png"));
     }
 
     vocal.reset();

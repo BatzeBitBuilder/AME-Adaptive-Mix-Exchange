@@ -16,6 +16,8 @@ namespace
 const juce::Identifier rackTabId ("rackTab");
 const juce::Identifier presetNameId ("presetName");
 constexpr int kFactoryIdBase = 1;
+constexpr int kUserIdBase = 1000;
+const juce::String userPrefix ("*");   // presetName-Präfix für eigene Presets
 }
 
 StripPanel::StripPanel (juce::AudioProcessorValueTreeState& state, MixHub& h, int s)
@@ -80,6 +82,15 @@ StripPanel::StripPanel (juce::AudioProcessorValueTreeState& state, MixHub& h, in
         m.knobs = { addKnob (pid::satDrive, "Drive"), addKnob (pid::satMix, "Mix"),
                     addKnob (pid::excAmount, "Exciter"), addKnob (pid::excFreq, "Exc Freq") };
     }
+    // Rack: Limiter / Clipper
+    {
+        auto& m = addModule (pid::limOn, [] (const SlotAudioData& d) { return d.limiterReductionDb.load (std::memory_order_relaxed); });
+        limOn = addToggle (pid::limOn, {});
+        limMode = addChoice (pid::limMode, { "Limiter", "Soft Clip", "Hard Clip" });
+        m.toggles = { limOn };
+        m.choices = { limMode };
+        m.knobs = { addKnob (pid::limCeiling, "Ceiling"), addKnob (pid::limRelease, "Release") };
+    }
     for (int i = 0; i < (int) modules.size(); ++i)
     {
         auto& tab = modules[(size_t) i]->tab;
@@ -135,6 +146,15 @@ StripPanel::StripPanel (juce::AudioProcessorValueTreeState& state, MixHub& h, in
     addAndMakeVisible (presetBox);
     fromRoleButton.onClick = [this] { loadPresetForCurrentRole(); };
     addAndMakeVisible (fromRoleButton);
+    saveButton.onClick = [this] { askSavePreset(); };
+    deleteButton.onClick = [this] { askDeletePreset(); };
+    abA.onClick = [this] { presets::selectAB (apvts, "A"); updatePresetButtons(); };
+    abB.onClick = [this] { presets::selectAB (apvts, "B"); updatePresetButtons(); };
+    abCopy.onClick = [this] { presets::copyActiveToOther (apvts); };
+    abA.setConnectedEdges (juce::Button::ConnectedOnRight);
+    abB.setConnectedEdges (juce::Button::ConnectedOnLeft);
+    for (auto* b : { &saveButton, &deleteButton, &abA, &abB, &abCopy })
+        addAndMakeVisible (*b);
 
     const int savedTab = (int) apvts.state.getProperty (rackTabId, (int) Module::Compressor);
     showModule ((Module) juce::jlimit (0, (int) modules.size() - 1, savedTab));
@@ -144,7 +164,7 @@ StripPanel::StripPanel (juce::AudioProcessorValueTreeState& state, MixHub& h, in
 void StripPanel::updateTexts()
 {
     static const std::pair<const char*, const char*> tabNames[] {
-        { "GATE", "GATE" }, { "KOMPRESSOR", "COMPRESSOR" }, { "DE-ESSER", "DE-ESSER" }, { "SÄTTIGUNG", "SATURATION" } };
+        { "GATE", "GATE" }, { "KOMPRESSOR", "COMPRESSOR" }, { "DE-ESSER", "DE-ESSER" }, { "SÄTTIGUNG", "SATURATION" }, { "LIMITER", "LIMITER" } };
     for (size_t i = 0; i < modules.size(); ++i)
         modules[i]->tab.setButtonText (tr (tabNames[i].first, tabNames[i].second));
 
@@ -167,7 +187,19 @@ void StripPanel::updateTexts()
     hpfSlope->box.setTooltip (tr ("Flankensteilheit Hochpass", "High-pass slope"));
     lpfSlope->box.setTooltip (tr ("Flankensteilheit Tiefpass", "Low-pass slope"));
 
-    for (auto* t : { gateOn, compOn, deessOn, satOn })
+    limMode->box.setTooltip (tr ("Limiter: Spitzenbegrenzer ohne Latenz (Release). Soft Clip: weiche Sättigung zum Ceiling. Hard Clip: hart abgeschnitten. Sitzt hinter Output-Gain.",
+                                 "Limiter: zero-latency peak limiter (release). Soft clip: soft saturation towards the ceiling. Hard clip: hard cut. Sits after the output gain."));
+    saveButton.setButtonText (tr ("Speichern", "Save"));
+    deleteButton.setButtonText (tr ("Löschen", "Delete"));
+    abCopy.setButtonText (MTM_TXT ("A→B"));
+    saveButton.setTooltip (tr ("Aktuelle Einstellungen als eigenes Preset speichern (alle Instanzen, alle Projekte)",
+                               "Save the current settings as a user preset (all instances, all projects)"));
+    deleteButton.setTooltip (tr ("Geladenes eigenes Preset löschen", "Delete the loaded user preset"));
+    abA.setTooltip (tr ("Einstellung A (A/B-Vergleich)", "Setting A (A/B comparison)"));
+    abB.setTooltip (tr ("Einstellung B (A/B-Vergleich)", "Setting B (A/B comparison)"));
+    abCopy.setTooltip (tr ("Aktive Einstellung in den anderen Platz kopieren", "Copy the active setting to the other slot"));
+
+    for (auto* t : { gateOn, compOn, deessOn, satOn, limOn })
         t->button.setButtonText (tr ("An", "On"));
     deessListen->button.setButtonText (tr ("Abhören", "Listen"));
     gateMode->box.setTooltip (tr ("Gate: schließt unter dem Threshold um Range. Expander: senkt leise Anteile im Verhältnis 1:2 / 1:4 ab.",
@@ -263,7 +295,20 @@ void StripPanel::fillPresetBox()
     for (int i = 0; i < (int) factory.size(); ++i)
         presetBox.addItem (getRoleNames()[(int) factory[(size_t) i].role], kFactoryIdBase + i);
 
-    presetBox.setTextWhenNothingSelected (apvts.state.getProperty (presetNameId, tr ("– kein Preset –", "– no preset –")).toString());
+    const auto user = presets::getUserPresetNames();
+    if (! user.isEmpty())
+    {
+        presetBox.addSeparator();
+        presetBox.addSectionHeading (tr ("Eigene Presets", "User presets"));
+        for (int i = 0; i < user.size(); ++i)
+            presetBox.addItem (user[i], kUserIdBase + i);
+    }
+
+    juce::String shown = apvts.state.getProperty (presetNameId).toString();
+    if (shown.startsWith (userPrefix))
+        shown = shown.substring (userPrefix.length());
+    presetBox.setTextWhenNothingSelected (shown.isNotEmpty() ? shown : tr ("– kein Preset –", "– no preset –"));
+    updatePresetButtons();
     presetBox.setTooltip (tr ("Werkspreset laden: setzt Filter, EQ, Gate, Kompressor und De-Esser. Input, Phase und Output bleiben.",
                               "Load a factory preset: sets filter, EQ, gate, compressor and de-esser. Input, phase and output stay."));
 }
@@ -278,9 +323,15 @@ void StripPanel::presetChosen()
         presets::applyFactory (apvts, factory[(size_t) fi]);
         apvts.state.setProperty (presetNameId, tr ("Werk: ", "Factory: ") + presetBox.getText(), nullptr);
     }
+    else if (id >= kUserIdBase)
+    {
+        const auto name = presetBox.getText();
+        if (presets::loadUserPreset (apvts, name))
+            apvts.state.setProperty (presetNameId, userPrefix + name, nullptr);
+    }
     // Anzeige: Name des geladenen Presets, Auswahl zurücksetzen (erneut wählbar)
     presetBox.setSelectedId (0, juce::dontSendNotification);
-    presetBox.setTextWhenNothingSelected (apvts.state.getProperty (presetNameId).toString());
+    fillPresetBox();
 }
 
 void StripPanel::loadPresetForCurrentRole()
@@ -289,8 +340,68 @@ void StripPanel::loadPresetForCurrentRole()
     {
         presets::applyFactory (apvts, *fp);
         apvts.state.setProperty (presetNameId, tr ("Werk: ", "Factory: ") + getRoleNames()[(int) currentRole], nullptr);
-        presetBox.setTextWhenNothingSelected (apvts.state.getProperty (presetNameId).toString());
+        fillPresetBox();
     }
+}
+
+void StripPanel::updatePresetButtons()
+{
+    const bool user = apvts.state.getProperty (presetNameId).toString().startsWith (userPrefix);
+    deleteButton.setEnabled (user);
+    const bool b = presets::getActiveAB (apvts) == "B";
+    abA.setToggleState (! b, juce::dontSendNotification);
+    abB.setToggleState (b, juce::dontSendNotification);
+    abCopy.setButtonText (b ? MTM_TXT ("B→A") : MTM_TXT ("A→B"));
+}
+
+void StripPanel::askSavePreset()
+{
+    juce::String suggestion = apvts.state.getProperty (presetNameId).toString();
+    if (suggestion.startsWith (userPrefix))
+        suggestion = suggestion.substring (userPrefix.length());
+    else
+        suggestion = {};
+
+    auto* w = new juce::AlertWindow (tr ("Preset speichern", "Save preset"),
+                                     tr ("Name des eigenen Presets (gleicher Name überschreibt):",
+                                         "Name of the user preset (same name overwrites):"),
+                                     juce::MessageBoxIconType::NoIcon, this);
+    w->addTextEditor ("name", suggestion);
+    w->addButton (tr ("Speichern", "Save"), 1, juce::KeyPress (juce::KeyPress::returnKey));
+    w->addButton (tr ("Abbrechen", "Cancel"), 0, juce::KeyPress (juce::KeyPress::escapeKey));
+    juce::Component::SafePointer<StripPanel> safe (this);
+    w->enterModalState (true, juce::ModalCallbackFunction::create ([safe, w] (int result)
+    {
+        if (safe == nullptr || result != 1)
+            return;
+        const auto name = w->getTextEditorContents ("name").trim();
+        if (name.isNotEmpty() && presets::saveUserPreset (safe->apvts, name))
+        {
+            safe->apvts.state.setProperty (presetNameId, userPrefix + name, nullptr);
+            safe->fillPresetBox();
+        }
+    }), true);
+}
+
+void StripPanel::askDeletePreset()
+{
+    auto name = apvts.state.getProperty (presetNameId).toString();
+    if (! name.startsWith (userPrefix))
+        return;
+    name = name.substring (userPrefix.length());
+
+    juce::Component::SafePointer<StripPanel> safe (this);
+    juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::QuestionIcon, tr ("Preset löschen", "Delete preset"),
+                                        tr ("Eigenes Preset löschen: ", "Delete user preset: ") + name,
+                                        tr ("Löschen", "Delete"), tr ("Abbrechen", "Cancel"), this,
+                                        juce::ModalCallbackFunction::create ([safe, name] (int result)
+    {
+        if (safe == nullptr || result == 0)
+            return;
+        presets::deleteUserPreset (name);
+        safe->apvts.state.setProperty (presetNameId, {}, nullptr);
+        safe->fillPresetBox();
+    }));
 }
 
 void StripPanel::updateRoleButton()
@@ -408,11 +519,19 @@ void StripPanel::resized()
     presetBar = area.removeFromTop (34);
     {
         auto r = presetBar.reduced (8, 4);
-        presetLabel.setBounds (r.removeFromLeft (64));
-        presetBox.setBounds (r.removeFromLeft (250));
-        r.removeFromLeft (10);
-        fromRoleButton.setBounds (r.removeFromLeft (250));
-        presetTools = r.withTrimmedLeft (10);
+        presetLabel.setBounds (r.removeFromLeft (62));
+        presetBox.setBounds (r.removeFromLeft (230));
+        r.removeFromLeft (8);
+        fromRoleButton.setBounds (r.removeFromLeft (226));
+        r.removeFromLeft (8);
+        saveButton.setBounds (r.removeFromLeft (84));
+        r.removeFromLeft (4);
+        deleteButton.setBounds (r.removeFromLeft (72));
+        abCopy.setBounds (r.removeFromRight (52));
+        r.removeFromRight (4);
+        abB.setBounds (r.removeFromRight (32));
+        abA.setBounds (r.removeFromRight (32));
+        presetTools = r;
     }
     area.removeFromTop (gap);
 

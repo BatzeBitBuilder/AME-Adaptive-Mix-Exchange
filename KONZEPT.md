@@ -1,6 +1,6 @@
 # AME (Adaptive Mix Exchange) – Konzept
 
-Stand: 2026-11-08 · Version 0.9.0 (Roadmap Schritte 1–4 + Vintage-UI + Umbenennung AME + DE/EN + Handbuch + AGPLv3 + Shared-Memory-Hub)
+Stand: 2026-11-08 · Version 0.13.0 (Roadmap 1–4, 6a + Vintage-UI, AME, DE/EN, Handbuch, AGPLv3, Shared-Memory-Hub, vollständiger Channelstrip mit Presets)
 Entwickler: Batze the bit builder
 
 ## Ziel
@@ -21,6 +21,9 @@ VST3-Channelstrip, dessen Instanzen sich gegenseitig kennen. Anhand eines global
 | Presets | Rock / Band, Pop (Vocal-Fokus), Electronic, Hip-Hop, Akustik / Singer-Songwriter, Metal |
 | Konfliktauflösung | Priorität aus Preset × Rolle × Frequenzregion, pro Spur verschiebbar (Sehr hoch … Sehr niedrig) |
 | Eingriffe | eigene adaptive Stufe: 10 Oktav-Absenkungen + Hochpass + Lautstärke; manueller EQ bleibt unberührt |
+| Channelstrip | Input + Phase, HPF/LPF 12/24/48, Gate/Expander, 4-Band-EQ (Low/High Shelf/Glocke), Kompressor (Knee, Mix, SC-HPF, Auto-Release), De-Esser (Split/Wide), Sättigung (Röhre/Band/Transistor) + Exciter, Limiter/Soft/Hard Clip; Reihenfolge EQ/Comp wählbar; Modul-Rack mit Reitern |
+| Presets | Werkspresets je Rolle (Klang-Module), „Preset der Rolle“ (Auto-Kennung), eigene Presets (%APPDATA%\AME\Presets), A/B im Projekt |
+| Fenster | frei skalierbar 50–200 % (Basis 1100 × 960), Größe global gespeichert |
 | Lautstärke | Rollen-Verhältnisse, Summenleistung bleibt konstant |
 | Kontrolle | A/B-Bypass (Spur/global), Einfrieren (Spur/alle, im Projekt gespeichert), EQ-Grafik |
 | Reaktion | pro Spur stufenlos: langsam (Langzeit-Balance) … schnell (Ducking) |
@@ -48,7 +51,7 @@ VST3-Channelstrip, dessen Instanzen sich gegenseitig kennen. Anhand eines global
 - Adaptive: dynamische EQ-Bänder folgen dem Pegel der maskierenden Spuren (geglättet).
 
 ### 4. DSP-Kette pro Strip
-Input-Gain → HPF/LPF → EQ (4–6 Bänder, statisch + dynamisch) → Kompressor → optional Sättigung → Pan/Breite → Output
+Input → Phase → HPF/LPF → Gate/Expander → EQ ⇄ Kompressor → De-Esser → Sättigung/Exciter → [Analyse] → adaptive Stufe → Width/Pan → Output → Limiter/Clipper
 
 ### 5. UI
 - Line: Input/Filter/Kompressor/Output, EQ mit Analyzer + Spektrogramm, Adaptiv-Sektion, VU Ausgang + GR, Typenschild.
@@ -65,9 +68,11 @@ Input-Gain → HPF/LPF → EQ (4–6 Bänder, statisch + dynamisch) → Kompress
    ✅ Englische Oberfläche (umschaltbar) + Handbuch DE/EN (v0.8.0)
 5. Veröffentlichung auf GitHub: ✅ privates Repo (v0.8.0), ✅ Lizenz AGPLv3 (v0.8.1); offen: Repo öffentlich, Release-Build, ggf. GitHub Actions/Pages
 6. ✅ Shared-Memory-Hub prozessübergreifend (v0.9.0); offen: Feinschliff, Performance
+7. ✅ Vollständiger Channelstrip: Phase, Gate, De-Esser, Comp-Erweiterung, skalierbares Fenster (v0.10.0), Werkspresets je Rolle (v0.11.0), Sättigung/Exciter, EQ-Typen, Flanken, Reihenfolge (v0.12.0), Limiter/Clipper, eigene Presets, A/B (v0.13.0)
 
 ## Offene Punkte
-- v0.9.0 in Ableton testen (DE/EN, Handbuch, Tooltip Verbindung); optional Bitwig/Reaper mit Plug-in-Sandbox
+- v0.9.0 in Ableton getestet ✅; v0.13.0 unter Windows bauen und testen (neue Module, Presets, A/B, Skalierung)
+- Werkspresets mit echtem Material feinjustieren; ggf. Oversampling für Sättigung/Clipper
 - Nächster Schritt: weitere Entwicklung; später Repo öffentlich + Release
 - Profilwerte weiter mit echtem Material feinjustieren
 - Rollenerkennung mit echtem Material prüfen (Prototypen in RoleClassifier.cpp justieren); optional ML-Klassifikator

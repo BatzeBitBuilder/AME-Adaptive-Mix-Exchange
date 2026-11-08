@@ -166,6 +166,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     l.add (makeFloat (pid::width,   "Width",  { 0.0f, 200.0f, 0.1f }, 100.0f, "%"));
     l.add (makeFloat (pid::outGain, "Output", { -24.0f, 24.0f, 0.01f }, 0.0f, "dB"));
 
+    // Limiter / Clipper am Ausgang
+    l.add (makeBool   (pid::limOn,      "Limiter On", false));
+    l.add (makeChoice (pid::limMode,    "Limiter Mode", { "Limiter", "Soft Clip", "Hard Clip" }, 0, true));
+    l.add (makeFloat  (pid::limCeiling, "Ceiling", { -12.0f, 0.0f, 0.1f }, -0.3f, "dB"));
+    l.add (makeFloat  (pid::limRelease, "Limiter Release", [] { Range r { 5.0f, 500.0f }; r.setSkewForCentre (60.0f); return r; }(), 60.0f, "ms"));
+
     return l;
 }
 } // namespace mtm

@@ -19,6 +19,7 @@ enum Idx
     iPan, iWidth, iOutGain,
     iHpfSlope, iLpfSlope, iLsType, iLsQ, iHsType, iHsQ, iOrder,
     iSatOn, iSatType, iSatDrive, iSatMix, iExcAmount, iExcFreq,
+    iLimOn, iLimMode, iLimCeiling, iLimRelease,
     iCount
 };
 
@@ -31,7 +32,8 @@ const char* const ids[iCount] {
     pid::deessOn, pid::deessMode, pid::deessFreq, pid::deessThresh, pid::deessRange, pid::deessListen,
     pid::pan, pid::width, pid::outGain,
     pid::hpfSlope, pid::lpfSlope, pid::lsType, pid::lsQ, pid::hsType, pid::hsQ, pid::chainOrder,
-    pid::satOn, pid::satType, pid::satDrive, pid::satMix, pid::excAmount, pid::excFreq
+    pid::satOn, pid::satType, pid::satDrive, pid::satMix, pid::excAmount, pid::excFreq,
+    pid::limOn, pid::limMode, pid::limCeiling, pid::limRelease
 };
 } // namespace
 
@@ -99,5 +101,10 @@ void StripParamReader::read (ChannelStrip::Params& p) const noexcept
     p.pan = get (iPan);
     p.width = get (iWidth) * 0.01f;
     p.outGainDb = get (iOutGain);
+
+    p.limOn = on (iLimOn);
+    p.limMode = juce::roundToInt (get (iLimMode));
+    p.limCeilingDb = get (iLimCeiling);
+    p.limReleaseMs = get (iLimRelease);
 }
 } // namespace mtm

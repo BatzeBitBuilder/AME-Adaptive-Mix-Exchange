@@ -15,7 +15,7 @@ namespace mtm
 //   processPre:  Input -> Phase -> HPF/LPF -> Gate/Expander -> EQ <-> Kompressor (Reihenfolge wählbar)
 //                -> De-Esser -> Sättigung/Exciter
 //   [Analyse-Abgriff]
-//   processPost: Adaptiv (HPF, 10 Oktav-Bänder, Gain) -> Width/Pan -> Output
+//   processPost: Adaptiv (HPF, 10 Oktav-Bänder, Gain) -> Width/Pan -> Output -> Limiter/Clipper
 class ChannelStrip
 {
 public:
@@ -60,6 +60,10 @@ public:
         float pan = 0.0f;        // -1 .. 1
         float width = 1.0f;      // 0 .. 2
         float outGainDb = 0.0f;
+
+        bool  limOn = false;
+        int   limMode = 0;           // 0 = Limiter, 1 = Soft Clip, 2 = Hard Clip
+        float limCeilingDb = -0.3f, limReleaseMs = 60.0f;
     };
 
     void prepare (double sampleRate, int numChannels);
@@ -70,6 +74,10 @@ public:
     float getGainReductionDb() const noexcept { return compEnvDb; }
     float getGateReductionDb() const noexcept { return -gateGainDb; }      // >= 0
     float getDeessReductionDb() const noexcept { return deessRedDb; }      // >= 0
+    float getLimiterReductionDb() const noexcept { return limRedDb; }      // >= 0
+
+    // Clipper-Kennlinie (für Tests): weich bzw. hart auf ceiling begrenzt
+    static float clip (int mode, float x, float ceiling) noexcept;
 
     // Frequenzgang von Filtern + EQ (für die Anzeige)
     static float getManualResponseDb (const Params&, float freq, double sampleRate = 48000.0) noexcept;
@@ -133,5 +141,6 @@ private:
 
     // Ausgang
     juce::SmoothedValue<float> outGain, panS, widthS;
+    float limGain = 1.0f, limRedDb = 0.0f;
 };
 } // namespace mtm

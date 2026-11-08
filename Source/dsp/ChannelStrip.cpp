@@ -34,6 +34,7 @@ void ChannelStrip::reset()
     for (auto& b : lpf) b.reset();
     excHp.reset(); excHp2.reset(); excApplied = -1.0f;
     dcX = {}; dcY = {};
+    limGain = 1.0f; limRedDb = 0.0f;
     for (auto& b : eq) b.reset();
     aHpf.reset();
     for (auto& b : aEq) { b.reset(); b.setup (Biquad::Type::Peak, sr, 1000.0, kAdaptiveQ, 0.0); }
@@ -430,6 +431,9 @@ void ChannelStrip::processPost (juce::AudioBuffer<float>& buffer, const Params& 
         aHpfActive = false;
 
     outGain.setTargetValue (juce::Decibels::decibelsToGain (p.outGainDb + p.adaptiveGainDb));
+    const float ceiling = dbToGain (juce::jlimit (-24.0f, 0.0f, p.limCeilingDb));
+    const float limRel = coefFor (p.limReleaseMs, sr);
+    float blockPeak = 0.0f, blockMinGain = 1.0f;
     panS.setTargetValue (p.pan);
     widthS.setTargetValue (p.width);
 
@@ -487,15 +491,63 @@ void ChannelStrip::processPost (juce::AudioBuffer<float>& buffer, const Params& 
                 const float angle = (pan + 1.0f) * juce::MathConstants<float>::pi * 0.25f;
                 const float gl = juce::jmin (1.0f, juce::MathConstants<float>::sqrt2 * std::cos (angle));
                 const float gr = juce::jmin (1.0f, juce::MathConstants<float>::sqrt2 * std::sin (angle));
-                L[i] = l * gl * gOut;
-                R[i] = r * gr * gOut;
+                l *= gl * gOut;
+                r *= gr * gOut;
             }
             else
             {
-                L[i] = l * gOut;
+                l *= gOut;
             }
+
+            // --- Limiter / Clipper ---
+            if (p.limOn)
+            {
+                const float peak = juce::jmax (std::abs (l), R ? std::abs (r) : 0.0f);
+                blockPeak = juce::jmax (blockPeak, peak);
+                if (p.limMode == 0)
+                {
+                    // Spitzenbegrenzer ohne Latenz: sofortiger Eingriff, Rücklauf mit Release
+                    const float need = peak > ceiling ? ceiling / peak : 1.0f;
+                    limGain = need < limGain ? need : limRel * limGain + (1.0f - limRel);
+                    l *= limGain; r *= limGain;
+                    l = juce::jlimit (-ceiling, ceiling, l);   // Sicherheit
+                    r = juce::jlimit (-ceiling, ceiling, r);
+                    blockMinGain = juce::jmin (blockMinGain, limGain);
+                }
+                else
+                {
+                    l = clip (p.limMode, l, ceiling);
+                    r = clip (p.limMode, r, ceiling);
+                }
+            }
+
+            L[i] = l;
+            if (R) R[i] = r;
         }
     }
+
+    if (! p.limOn)
+    {
+        limGain = 1.0f;
+        limRedDb = 0.0f;
+    }
+    else if (p.limMode == 0)
+        limRedDb = -gainToDb (blockMinGain);
+    else
+        limRedDb = juce::jmax (0.0f, gainToDb (blockPeak) - p.limCeilingDb);
+}
+
+float ChannelStrip::clip (int mode, float x, float c) noexcept
+{
+    if (mode == 2)
+        return juce::jlimit (-c, c, x);
+
+    // weich: linear bis 50 % des Ceilings, darüber tanh-Übergang (stetige Steigung)
+    const float k = 0.5f * c, ax = std::abs (x);
+    if (ax <= k)
+        return x;
+    const float y = k + (c - k) * std::tanh ((ax - k) / (c - k));
+    return x < 0.0f ? -y : y;
 }
 
 float ChannelStrip::getAdaptiveResponseDb (const std::array<float, kNumAdaptiveBands>& cutDb,

@@ -30,6 +30,9 @@ Ergebnis: `build\AME_artefacts\Release\VST3\AME Adaptive Mix Exchange.vst3`
 - Auf jede Spur laden, **Modus: Spur**, **Rolle** wählen.
 - Eine Instanz auf den **Master-Bus**, **Modus: Exchange (Master)**, Programm wählen.
 - Exchange zeigt die Mix-Übersicht aller Lines; in Spur-Instanzen über „Mix-Übersicht“ umschaltbar.
+- Channelstrip: Input + Phase (Ø L/R), HPF/LPF (12/24/48 dB/Okt), 4-Band-EQ (Low/High Shelf oder Glocke), Modul-Rack mit Gate/Expander, Kompressor (Knee, Mix, SC-HPF, Auto-Release), De-Esser, Sättigung/Exciter, Limiter/Clipper; Reihenfolge EQ/Kompressor wählbar.
+- Presets: Werkspresets je Rolle („Preset der Rolle“ lädt passend zur Auto-Kennung), eigene Presets (`%APPDATA%\AME\Presets`), A/B-Vergleich.
+- Fenster frei skalierbar (Ecke unten rechts, 50–200 %).
 - EQ-Grafik: Punkte ziehen (Frequenz/Gain), Mausrad = Q, Doppelklick = 0 dB.
 - Direkt (A/B): Eingriffe der Engine aus (Line bzw. im Exchange für alle). Hold: aktuelle Engine-Werte festhalten (bleiben beim Speichern erhalten, gelten auch ohne Exchange); im Exchange „Hold (alle) / Hold lösen“.
 - Rolle „Auto“: Erkennung über den Spurnamen (z. B. „Kick“, „Vox“, „Gtr“), sonst nach einigen Sekunden über den Klang; Anzeige „→ Rolle (Sicherheit)“. Manuell gewählte Rollen haben Vorrang.
@@ -57,8 +60,11 @@ Source/
   Parameters.*        Parameter-IDs und -Layout
   Roles.h             Rollen, Genres, Modi (Namen DE/EN)
   i18n/Lang.*         UI-Sprache (global, gespeichert), tr("de", "en")
+  Settings.*          Benutzer-Einstellungen (%APPDATA%\AME\AME.settings)
+  dsp/StripParams.*   Parameter-Zeiger-Cache -> ChannelStrip::Params
+  engine/StripPresets.*  Werkspresets je Rolle, eigene Presets, A/B
   hub/MixHub.*        Instanz-Register im Shared Memory der DAW-Sitzung (prozessübergreifend, lock-free Audio-Daten)
-  dsp/ChannelStrip.*  HPF/LPF, 4-Band-EQ, Kompressor, Width/Pan
+  dsp/ChannelStrip.*  Phase, HPF/LPF, Gate, EQ, Kompressor, De-Esser, Sättigung, Adaptiv, Width/Pan, Limiter
   dsp/Biquad.h        RBJ-Biquad
   dsp/SpectrumAnalyzer.*  FFT-Analyse -> 32 Bänder
   hub/MaskingModel.*  Masking-Matrix, Hotspots

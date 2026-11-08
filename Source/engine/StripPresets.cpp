@@ -3,6 +3,7 @@
 
 #include "StripPresets.h"
 #include "Parameters.h"
+#include "Settings.h"
 
 namespace mtm::presets
 {
@@ -25,7 +26,7 @@ const juce::StringArray& getUserScope()
     static const juce::StringArray s = []
     {
         juce::StringArray a (getSoundScope());
-        a.addArray (juce::StringArray { inGain, phaseL, phaseR, pan, width, outGain });
+        a.addArray (juce::StringArray { inGain, phaseL, phaseR, pan, width, outGain, limOn, limMode, limCeiling, limRelease });
         return a;
     }();
     return s;
@@ -152,5 +153,136 @@ void applyFactory (juce::AudioProcessorValueTreeState& apvts, const FactoryPrese
     for (const auto& x : preset.values)
         v.emplace_back (x.id, x.value);
     applyValues (apvts, getSoundScope(), v, true);
+}
+//==============================================================================
+namespace
+{
+const juce::Identifier presetTag ("AMEPreset"), paramTag ("Param"), abTag ("ABCompare"), activeId ("active");
+
+std::vector<std::pair<juce::String, float>> capture (juce::AudioProcessorValueTreeState& apvts)
+{
+    std::vector<std::pair<juce::String, float>> v;
+    for (const auto& id : getUserScope())
+        if (auto* raw = apvts.getRawParameterValue (id))
+            v.emplace_back (id, raw->load());
+    return v;
+}
+
+juce::ValueTree toTree (const juce::Identifier& type, const std::vector<std::pair<juce::String, float>>& values)
+{
+    juce::ValueTree t (type);
+    for (const auto& [id, value] : values)
+        t.setProperty (juce::Identifier (id), value, nullptr);
+    return t;
+}
+
+std::vector<std::pair<juce::String, float>> fromTree (const juce::ValueTree& t)
+{
+    std::vector<std::pair<juce::String, float>> v;
+    for (int i = 0; i < t.getNumProperties(); ++i)
+    {
+        const auto name = t.getPropertyName (i);
+        v.emplace_back (name.toString(), (float) t.getProperty (name));
+    }
+    return v;
+}
+} // namespace
+
+juce::File getUserPresetFolder()
+{
+    return settings::getUserDataFolder().getChildFile ("Presets");
+}
+
+juce::StringArray getUserPresetNames()
+{
+    juce::StringArray names;
+    for (const auto& f : getUserPresetFolder().findChildFiles (juce::File::findFiles, false, "*.amepreset"))
+    {
+        juce::String name = f.getFileNameWithoutExtension();
+        if (auto xml = juce::XmlDocument::parse (f))
+            name = xml->getStringAttribute ("name", name);
+        names.add (name);
+    }
+    names.sortNatural();
+    return names;
+}
+
+static juce::File fileFor (const juce::String& name)
+{
+    return getUserPresetFolder().getChildFile (juce::File::createLegalFileName (name.trim()) + ".amepreset");
+}
+
+bool saveUserPreset (juce::AudioProcessorValueTreeState& apvts, const juce::String& name)
+{
+    if (name.trim().isEmpty())
+        return false;
+
+    juce::XmlElement xml (presetTag.toString());
+    xml.setAttribute ("name", name.trim());
+    xml.setAttribute ("version", JucePlugin_VersionString);
+    for (const auto& [id, value] : capture (apvts))
+    {
+        auto* e = xml.createNewChildElement (paramTag.toString());
+        e->setAttribute ("id", id);
+        e->setAttribute ("value", value);
+    }
+
+    getUserPresetFolder().createDirectory();
+    return xml.writeTo (fileFor (name));
+}
+
+bool loadUserPreset (juce::AudioProcessorValueTreeState& apvts, const juce::String& name)
+{
+    auto xml = juce::XmlDocument::parse (fileFor (name));
+    if (xml == nullptr || ! xml->hasTagName (presetTag.toString()))
+        return false;
+
+    std::vector<std::pair<juce::String, float>> v;
+    for (auto* e : xml->getChildWithTagNameIterator (paramTag.toString()))
+        v.emplace_back (e->getStringAttribute ("id"), (float) e->getDoubleAttribute ("value"));
+
+    applyValues (apvts, getUserScope(), v, true);   // in älteren Presets fehlende Parameter → Standard
+    return true;
+}
+
+bool deleteUserPreset (const juce::String& name)
+{
+    const auto f = fileFor (name);
+    return f.existsAsFile() && f.deleteFile();
+}
+
+juce::String getActiveAB (const juce::AudioProcessorValueTreeState& apvts)
+{
+    const auto t = apvts.state.getChildWithName (abTag);
+    return t.isValid() && t.getProperty (activeId).toString() == "B" ? "B" : "A";
+}
+
+void selectAB (juce::AudioProcessorValueTreeState& apvts, const juce::String& slot)
+{
+    const auto current = getActiveAB (apvts);
+    if (slot == current)
+        return;
+
+    auto ab = apvts.state.getOrCreateChildWithName (abTag, nullptr);
+
+    // aktuelle Einstellungen im bisherigen Platz sichern
+    const juce::Identifier curId (current), nextId (slot);
+    ab.removeChild (ab.getChildWithName (curId), nullptr);
+    ab.appendChild (toTree (curId, capture (apvts)), nullptr);
+
+    // Zielplatz laden (leer = bisherige Einstellungen übernehmen)
+    const auto target = ab.getChildWithName (nextId);
+    if (target.isValid())
+        applyValues (apvts, getUserScope(), fromTree (target), false);
+
+    ab.setProperty (activeId, slot, nullptr);
+}
+
+void copyActiveToOther (juce::AudioProcessorValueTreeState& apvts)
+{
+    auto ab = apvts.state.getOrCreateChildWithName (abTag, nullptr);
+    const juce::Identifier other (getActiveAB (apvts) == "A" ? "B" : "A");
+    ab.removeChild (ab.getChildWithName (other), nullptr);
+    ab.appendChild (toTree (other, capture (apvts)), nullptr);
 }
 } // namespace mtm::presets

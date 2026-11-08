@@ -31,7 +31,7 @@ public:
     void updateTexts();   // nach Sprachwechsel
 
     // Rack-Reiter (für Tests / Screenshots)
-    enum class Module { Gate = 0, Compressor, DeEsser, Saturation, NumModules };
+    enum class Module { Gate = 0, Compressor, DeEsser, Saturation, Limiter, NumModules };
     void showModule (Module);
     Module getVisibleModule() const noexcept { return currentModule; }
 
@@ -90,6 +90,9 @@ private:
     void fillPresetBox();
     void presetChosen();
     void updateRoleButton();
+    void updatePresetButtons();
+    void askSavePreset();
+    void askDeletePreset();
 
     juce::AudioProcessorValueTreeState& apvts;
     MixHub& hub;
@@ -110,7 +113,7 @@ private:
     juce::Rectangle<int> presetBar, presetTools;
     juce::Label presetLabel;
     juce::ComboBox presetBox;
-    juce::TextButton fromRoleButton;
+    juce::TextButton fromRoleButton, saveButton, deleteButton, abA { "A" }, abB { "B" }, abCopy;
     Role currentRole = Role::Auto;
 
     // Rack
@@ -118,8 +121,8 @@ private:
     Module currentModule = Module::Compressor;
     juce::Rectangle<int> rackBounds, rackMeter, outputSpare;
     Toggle *gateOn = nullptr, *compOn = nullptr, *compAutoRel = nullptr, *deessOn = nullptr, *deessListen = nullptr,
-           *satOn = nullptr;
-    Choice *gateMode = nullptr, *deessMode = nullptr, *satType = nullptr;
+           *satOn = nullptr, *limOn = nullptr;
+    Choice *gateMode = nullptr, *deessMode = nullptr, *satType = nullptr, *limMode = nullptr;
 
     // Adaptiv
     Toggle *aEqToggle = nullptr, *aHpfToggle = nullptr, *aGainToggle = nullptr,

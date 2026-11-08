@@ -245,7 +245,7 @@ void VintageLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& b,
     }
 
     g.setFont (fonts::label (17.0f));
-    g.setColour (b.getToggleState() ? colours::amberLamp : colours::cream);
+    g.setColour ((b.getToggleState() ? colours::amberLamp : colours::cream).withMultipliedAlpha (b.isEnabled() ? 1.0f : 0.35f));
     g.drawText (b.getButtonText(), r, juce::Justification::centred);
 }
 

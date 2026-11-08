@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.0 – 2026-11-08 (Limiter/Clipper, eigene Presets, A/B)
+- **Limiter / Clipper** (neues Rack-Modul, hinter dem Output-Gain): Limiter ohne Latenz (sofortiger Eingriff, Release), Soft Clip, Hard Clip; Ceiling −12…0 dB, kein Sample darüber; Reduktionsanzeige
+- **Eigene Presets**: Speichern/Laden/Löschen in der Preset-Leiste, Ablage `%APPDATA%\AME\Presets\*.amepreset` (XML, Klarwerte, Versionsangabe), für alle Projekte; umfassen alle Strip-Einstellungen inkl. Input, Phase, Output und Limiter
+- **A/B-Vergleich** der Einstellungen: Plätze A und B, „A→B“ kopiert die aktive Einstellung; wird im Projekt gespeichert
+- Handbuch DE/EN: Kapitel „Die Line“ neu (Signalweg, Presets/A-B, Modul-Rack, EQ-Typen, Fenstergröße), Workflow-Tipps
+- Deaktivierte Tasten werden abgedunkelt dargestellt
+- Smoke-Test: Limiter/Soft/Hard Clip (Spitze ≤ Ceiling), eigene Presets (Speichern/Laden/Löschen), A/B inkl. Projekt-Speicherung; Screenshots aller Rack-Module
+
 ## 0.12.0 – 2026-11-08 (Sättigung/Exciter, EQ-Erweiterung, Reihenfolge)
 - **Sättigung / Exciter** (neues Rack-Modul): Röhre (asymmetrisch, gerade Obertöne), Band (weich), Transistor (härter); Drive 0–24 dB mit automatischem Pegelausgleich (Kleinsignal unverändert), Mix; Exciter (gerade Obertöne nur aus dem Höhenband, 2–12 kHz)
 - **EQ erweitert**: Low und High wahlweise Shelf oder Glocke, neue Regler Low Q / High Q (auch per Mausrad in der Grafik)

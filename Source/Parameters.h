@@ -90,6 +90,11 @@ inline constexpr const char* deessListen = "deessListen";
 inline constexpr const char* pan     = "pan";
 inline constexpr const char* width   = "width";
 inline constexpr const char* outGain = "outGain";
+
+inline constexpr const char* limOn      = "limOn";
+inline constexpr const char* limMode    = "limMode";      // 0 = Limiter, 1 = Soft Clip, 2 = Hard Clip
+inline constexpr const char* limCeiling = "limCeiling";
+inline constexpr const char* limRelease = "limRelease";
 } // namespace mtm::pid
 
 namespace mtm

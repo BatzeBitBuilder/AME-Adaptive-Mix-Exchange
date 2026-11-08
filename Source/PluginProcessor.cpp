@@ -287,6 +287,7 @@ void MultiTrackMixProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     data->gainReductionDb.store (track ? strip.getGainReductionDb() : 0.0f);
     data->gateReductionDb.store (track ? strip.getGateReductionDb() : 0.0f, std::memory_order_relaxed);
     data->deessReductionDb.store (track ? strip.getDeessReductionDb() : 0.0f, std::memory_order_relaxed);
+    data->limiterReductionDb.store (track ? strip.getLimiterReductionDb() : 0.0f, std::memory_order_relaxed);
     data->blockCounter.fetch_add (1);
 }
 

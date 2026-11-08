@@ -1,6 +1,6 @@
 # AME – Adaptive Mix Exchange
 
-**Operating Manual · Version 0.12.0** · built by **Batze the bit builder**
+**Operating Manual · Version 0.13.0** · built by **Batze the bit builder**
 
 *Every track finds its aim.*
 
@@ -56,7 +56,7 @@ Live Sets saved with earlier versions keep loading: parameter IDs and the state 
 
 **How it works:**
 
-- All instances in the same project find each other automatically (process-wide registry inside the plug-in DLL). Nothing needs to be connected.
+- All instances in the same project find each other automatically (shared memory of the DAW session, even across plug-in processes). Nothing needs to be connected.
 - Every Line analyses its signal (FFT, 32 bands, short- and long-term spectrum) and shares it with the others.
 - The Exchange computes target values for each Line 50 times per second and sends them back.
 - Each Line moves smoothly towards these targets – at the response speed you set.
@@ -82,30 +82,53 @@ The header looks the same in Line and Exchange mode:
 
 ## The Line (track view)
 
+Signal path: **Input → Phase → Filter → Gate → EQ ⇄ Compressor → De-esser → Saturation → [analysis] → Adaptive → Pan/Width → Output → Limiter**
+
+### Presets and A/B
+The bar at the top:
+
+- **Preset**: factory presets by role (starting points for filter, EQ, gate, compressor, de-esser, saturation) and **user presets**. Factory presets leave input, phase, pan, width, output and limiter unchanged.
+- **Role preset**: loads the factory preset of the selected or auto-detected role.
+- **Save**: store the current settings as a user preset (the same name overwrites). User presets live in `%APPDATA%\AME\Presets` and are available in every project.
+- **Delete**: delete the loaded user preset.
+- **A / B**: compare two settings. On the first switch, B starts as a copy of A. **A→B** copies the active setting to the other slot. Both are saved with the project.
+
+Presets set parameters just like turning the knobs – the DAW can undo them.
+
 ### Input
-**Gain** (±24 dB) – input level before all stages.
+**Gain** (±24 dB). **Ø L / Ø R** invert the phase (polarity) of the left or right channel – e.g. for snare bottom or kick out.
 
 ### Filter
-**HPF** (20 Hz–1 kHz) and **LPF** (1–20 kHz), 24 dB/octave each. The **HPF** / **LPF** lamps in the title switch the filters on.
+**HPF** (20 Hz–1 kHz) and **LPF** (1–20 kHz); the lamps in the title switch them on. Below them the **slope**: 12, 24 or 48 dB/octave.
 
-### Compressor
-Soft knee, stereo-linked. **Thresh**, **Ratio** (1:1–20:1), **Attack** (0.1–100 ms), **Release** (10–1000 ms), **Makeup** (0–24 dB). The **On** lamp enables it. The right-hand VU meter shows the gain reduction.
+### Module rack
+Five modules on tabs; the lamp in a tab shows whether the module is on. On the right, the LED chain shows the current gain reduction of the visible module (0–24 dB). The last tab chosen is remembered in the project.
 
-### Output
-**Pan**, **Width** (0–200 %, 100 % = unchanged, 0 % = mono) and **Gain** (±24 dB).
+**Gate / expander** – **Gate** closes by **Range** below the threshold (3 dB hysteresis against chattering), **Expander 1:2 / 1:4** lowers quiet parts by the ratio (at most by Range). **Attack**, **Hold**, **Release**; **SC HPF** filters only the detector signal (e.g. so bass spill does not open the gate).
+
+**Compressor** – **Thresh**, **Ratio** (1:1–20:1), **Attack**, **Release**, **Knee** (0 = hard, up to 18 dB soft), **Makeup**, **Mix** (parallel compression: 0 % = unprocessed), **SC HPF** (lows trigger less compression). **Auto-Release**: fast recovery after short peaks, slow recovery during sustained compression. The VU meter on the right also shows the gain reduction.
+
+**De-esser** – **Freq** (2.5–12 kHz), **Thresh**, **Range** (maximum reduction). **Split**: only the band above the frequency is reduced (crossover), **Wide**: the whole signal. **Listen** outputs only the sibilance band – to set the frequency.
+
+**Saturation / exciter** – **Tube** (soft, even harmonics), **Tape** (soft, symmetric), **Transistor** (harder). **Drive** 0–24 dB with automatic level compensation: quiet signals stay unchanged, loud ones get denser. **Mix** blends in the original. **Exciter** adds harmonics generated only from the high band (above **Exc Freq**) – for presence and sheen.
+
+**Limiter** – sits at the very end after the output gain. **Limiter**: zero-latency peak limiter with **Release**. **Soft Clip**: soft saturation towards the **Ceiling**. **Hard Clip**: hard cut. No signal exceeds the ceiling.
 
 ### EQ with analyser
-Four bands: low shelf, Mid 1, Mid 2 (peak with Q) and high shelf (±18 dB).
+Four bands (±18 dB): **Low** and **High** either **Shelf** or **Bell** (selection in the title), Mid 1 and Mid 2 as bells. All bands with **Q** (for shelves = steepness of the transition). **Order**: EQ before or after the compressor.
 
 The display shows:
 
 - **Spectrum** of the track as a rainbow area (before the engine),
 - **After engine** as a green glowing line,
 - **Peak** dotted (falls at 12 dB/s),
-- the **EQ** curve (cream) with draggable points L, 1, 2, H, HP, LP,
+- the **EQ** curve (cream, incl. filters) with draggable points L, 1, 2, H, HP, LP,
 - the **Engine** curve dashed (amber).
 
 Handling: **drag** a point = frequency/gain, **mouse wheel** = Q, **double-click** = 0 dB. The **spectrogram** runs underneath.
+
+### Output
+In the right-hand column: **Pan**, **Width** (0–200 %, 100 % = unchanged, 0 % = mono) and **Gain** (±24 dB).
 
 ### Adaptive
 - **Amount** – strength of the engine's processing for this Line (0–100 %).
@@ -121,6 +144,9 @@ The LED display on the right shows the current cut per octave band (31 Hz–16 k
 - **Output**: VU ballistics (0 VU = −18 dBFS RMS), peak lamp from −1 dBFS.
 - **Compressor**: gain reduction 0 to −20 dB.
 - **Name plate**: version, Line number, track name (from the DAW), role and active program.
+
+### Window size
+Drag the bottom-right corner to scale the window freely from 50 to 200 %. The last size chosen applies to all AME windows.
 
 ## The Exchange (master)
 
@@ -202,6 +228,8 @@ Typical workflow: choose a program → let the song play a few times → compare
 ## Workflow tips
 
 - **Setting roles** pays off: Auto-ID is good, a deliberate choice is better.
+- Load the **role preset** as a starting point, then adapt the gate and compressor thresholds to the track's level.
+- Use **A/B** to compare two approaches directly (e.g. with and without saturation); save good settings as a **user preset**.
 - Change **Priority** only where the program does not fit (e.g. guitar solo: Very high).
 - **Slow response** for pads, guitars, keys; **fast** for bass against kick or pads against vocals.
 - Lower **Amount** per track if a track is processed too much; globally in the Exchange for the whole mix.
@@ -223,7 +251,7 @@ Typical workflow: choose a program → let the song play a few times → compare
 
 ## About AME
 
-**AME – Adaptive Mix Exchange**, version 0.12.0
+**AME – Adaptive Mix Exchange**, version 0.13.0
 
 Built by **Batze the bit builder**.
 

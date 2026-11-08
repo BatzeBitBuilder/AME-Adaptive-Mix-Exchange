@@ -1,6 +1,6 @@
 # AME – Adaptive Mix Exchange
 
-**Handbuch · Version 0.12.0** · entwickelt von **Batze the bit builder**
+**Handbuch · Version 0.13.0** · entwickelt von **Batze the bit builder**
 
 *Every track finds its aim.* – Jede Spur bekommt ihren Platz.
 
@@ -56,7 +56,7 @@ Bestehende Live-Sets mit früheren Versionen laden weiter: Parameter-IDs und Spe
 
 **So läuft es ab:**
 
-- Alle Instanzen im selben Projekt finden sich automatisch (prozessweites Register in der Plugin-DLL). Es gibt nichts zu verbinden.
+- Alle Instanzen im selben Projekt finden sich automatisch (gemeinsamer Speicher der DAW-Sitzung, auch über Plug-in-Prozesse hinweg). Es gibt nichts zu verbinden.
 - Jede Line analysiert ihr Signal (FFT, 32 Bänder, Kurz- und Langzeitspektrum) und stellt es den anderen bereit.
 - Das Exchange berechnet 50-mal pro Sekunde Zielwerte für jede Line und schickt sie zurück.
 - Jede Line nähert sich diesen Zielen geglättet an – mit der eingestellten Ansprechzeit.
@@ -82,30 +82,53 @@ Die Kopfzeile ist in Line und Exchange gleich aufgebaut:
 
 ## Die Line (Spur-Ansicht)
 
+Signalweg: **Input → Phase → Filter → Gate → EQ ⇄ Kompressor → De-Esser → Sättigung → [Analyse] → Adaptiv → Pan/Width → Output → Limiter**
+
+### Presets und A/B
+Die Leiste oben:
+
+- **Preset**: Werkspresets je Rolle (Startwerte für Filter, EQ, Gate, Kompressor, De-Esser, Sättigung) und **eigene Presets**. Werkspresets lassen Input, Phase, Pan, Width, Output und Limiter unverändert.
+- **Preset der Rolle**: lädt das Werkspreset der eingestellten bzw. per Auto-Kennung erkannten Rolle.
+- **Speichern**: aktuelle Einstellungen als eigenes Preset ablegen (gleicher Name überschreibt). Eigene Presets liegen in `%APPDATA%\AME\Presets` und stehen in allen Projekten zur Verfügung.
+- **Löschen**: das geladene eigene Preset löschen.
+- **A / B**: zwei Einstellungen vergleichen. Beim ersten Wechsel startet B als Kopie von A. **A→B** kopiert die aktive Einstellung in den anderen Platz. Beide werden im Projekt gespeichert.
+
+Presets setzen die Parameter wie eine Bedienung von Hand – die DAW kann sie rückgängig machen.
+
 ### Input
-**Gain** (±24 dB) – Eingangspegel vor allen Stufen.
+**Gain** (±24 dB). **Ø L / Ø R** kehren die Phase (Polarität) des linken bzw. rechten Kanals um – z. B. für Snare unten oder Kick Out.
 
 ### Filter
-**HPF** (20 Hz–1 kHz) und **LPF** (1–20 kHz), je 24 dB/Oktave. Die Lampen **HPF** / **LPF** im Titel schalten die Filter ein.
+**HPF** (20 Hz–1 kHz) und **LPF** (1–20 kHz), Lampen im Titel schalten sie ein. Darunter die **Flankensteilheit**: 12, 24 oder 48 dB/Oktave.
 
-### Kompressor
-Soft-Knee, stereo-gekoppelt. **Thresh**, **Ratio** (1:1–20:1), **Attack** (0,1–100 ms), **Release** (10–1000 ms), **Makeup** (0–24 dB). Lampe **An** schaltet ihn ein. Die Gain Reduction zeigt das rechte VU-Meter.
+### Modul-Rack
+Fünf Module auf Reitern; die Lampe im Reiter zeigt, ob das Modul eingeschaltet ist. Rechts zeigt die LED-Kette die aktuelle Pegelreduktion des sichtbaren Moduls (0–24 dB). Der zuletzt gewählte Reiter wird im Projekt gemerkt.
 
-### Output
-**Pan**, **Width** (0–200 %, 100 % = unverändert, 0 % = Mono) und **Gain** (±24 dB).
+**Gate / Expander** – **Gate** schließt unterhalb des Thresholds um **Range** (3 dB Hysterese gegen Flattern), **Expander 1:2 / 1:4** senkt leise Anteile im Verhältnis ab (höchstens um Range). **Attack**, **Hold**, **Release**; **SC HPF** filtert nur das Steuersignal (z. B. damit Bass-Übersprechen das Gate nicht öffnet).
+
+**Kompressor** – **Thresh**, **Ratio** (1:1–20:1), **Attack**, **Release**, **Knee** (0 = hart, bis 18 dB weich), **Makeup**, **Mix** (Parallelkompression: 0 % = unbearbeitet), **SC HPF** (Bässe lösen weniger Kompression aus). **Auto-Release**: schnelle Erholung nach kurzen Spitzen, langsame bei Dauerkompression. Die Gain Reduction zeigt zusätzlich das VU-Meter rechts.
+
+**De-Esser** – **Freq** (2,5–12 kHz), **Thresh**, **Range** (maximale Absenkung). **Split**: nur der Bereich oberhalb der Frequenz wird abgesenkt (Frequenzweiche), **Wide**: das ganze Signal. **Abhören** gibt nur das Zischband aus – zum Einstellen der Frequenz.
+
+**Sättigung / Exciter** – **Röhre** (weich, gerade Obertöne), **Band** (weich, symmetrisch), **Transistor** (härter). **Drive** 0–24 dB mit automatischem Pegelausgleich: leise Signale bleiben unverändert, laute werden verdichtet. **Mix** mischt das Original bei. **Exciter** fügt nur aus dem Höhenband (ab **Exc Freq**) Obertöne hinzu – für Präsenz und Glanz.
+
+**Limiter** – sitzt ganz am Ende hinter dem Output-Gain. **Limiter**: Spitzenbegrenzer ohne Latenz mit **Release**. **Soft Clip**: weiche Sättigung zum **Ceiling**. **Hard Clip**: hart abgeschnitten. Kein Signal überschreitet das Ceiling.
 
 ### EQ mit Analyzer
-Vier Bänder: Low Shelf, Mid 1, Mid 2 (Peak mit Q) und High Shelf (±18 dB).
+Vier Bänder (±18 dB): **Low** und **High** wahlweise **Shelf** oder **Glocke** (Auswahl im Titel), Mid 1 und Mid 2 als Glocke. Alle Bänder mit **Q** (bei Shelf = Steilheit des Übergangs). **Reihenfolge**: EQ vor oder hinter dem Kompressor.
 
 Die Grafik zeigt:
 
 - **Spektrum** der Spur als Regenbogenfläche (vor der Engine),
 - **Nach Engine** als grüne Leuchtlinie,
 - **Peak** gepunktet (fällt mit 12 dB/s),
-- **EQ**-Kurve (creme) mit ziehbaren Punkten L, 1, 2, H, HP, LP,
+- **EQ**-Kurve (creme, inkl. Filter) mit ziehbaren Punkten L, 1, 2, H, HP, LP,
 - **Engine**-Kurve gestrichelt (bernstein).
 
 Bedienung: Punkt **ziehen** = Frequenz/Gain, **Mausrad** = Q, **Doppelklick** = 0 dB. Darunter läuft das **Spektrogramm**.
+
+### Output
+In der rechten Spalte: **Pan**, **Width** (0–200 %, 100 % = unverändert, 0 % = Mono) und **Gain** (±24 dB).
 
 ### Adaptiv
 - **Amount** – Stärke der Engine-Eingriffe für diese Line (0–100 %).
@@ -121,6 +144,9 @@ Die LED-Anzeige rechts zeigt die aktuelle Absenkung je Oktavband (31 Hz–16 kHz
 - **Ausgang**: VU-Ballistik (0 VU = −18 dBFS RMS), Peak-Lampe ab −1 dBFS.
 - **Kompressor**: Gain Reduction 0 bis −20 dB.
 - **Typenschild**: Version, Line-Nummer, Spurname (aus der DAW), Rolle und aktives Programm.
+
+### Fenstergröße
+Das Fenster lässt sich an der Ecke unten rechts stufenlos von 50 bis 200 % skalieren. Die zuletzt gewählte Größe gilt für alle AME-Fenster.
 
 ## Das Exchange (Master)
 
@@ -202,6 +228,8 @@ Typischer Ablauf: Programm wählen → Song einige Male durchlaufen lassen → m
 ## Tipps für den Workflow
 
 - **Rollen setzen** lohnt sich: Die Auto-Kennung ist gut, eine bewusste Wahl ist besser.
+- **Preset der Rolle** als Startpunkt laden, danach Gate-Threshold und Kompressor-Threshold an den Pegel der Spur anpassen.
+- **A/B** nutzen, um zwei Ansätze (z. B. mit und ohne Sättigung) direkt zu vergleichen; gelungene Einstellungen als **eigenes Preset** speichern.
 - **Vorrang** nur dort ändern, wo das Programm nicht passt (z. B. Gitarrensolo: Vorrang Sehr hoch).
 - **Langsame Ansprechzeit** für Flächen, Gitarren, Keys; **schnell** für Bass gegen Kick oder Pads gegen Gesang.
 - **Amount** pro Spur zurücknehmen, wenn eine Spur zu stark bearbeitet wird; global im Exchange für den ganzen Mix.
@@ -223,7 +251,7 @@ Typischer Ablauf: Programm wählen → Song einige Male durchlaufen lassen → m
 
 ## Über AME
 
-**AME – Adaptive Mix Exchange**, Version 0.12.0
+**AME – Adaptive Mix Exchange**, Version 0.13.0
 
 Entwickelt von **Batze the bit builder**.
 
