@@ -1,6 +1,6 @@
 # AME – Adaptive Mix Exchange
 
-**Operating Manual · Version 0.8.1** · built by **Batze the bit builder**
+**Operating Manual · Version 0.9.0** · built by **Batze the bit builder**
 
 *Every track finds its aim.*
 
@@ -26,6 +26,8 @@ AME is a networked channel strip (VST3). Every instance on a track is called a *
 4. AME appears under the vendor **Batze the bit builder**.
 
 Live Sets saved with earlier versions keep loading: parameter IDs and the state format are unchanged.
+
+**Other DAWs:** AME runs in any Windows DAW with VST3 support (e.g. Cubase, Studio One, Reaper, FL Studio, Bitwig). The instances find each other through shared memory of the DAW session – even when the DAW runs plug-ins in separate processes (sandbox, bridge, e.g. Bitwig "Individually"). Tested so far with Ableton Live.
 
 ## Quick start
 
@@ -214,17 +216,18 @@ Typical workflow: choose a program → let the song play a few times → compare
 | ENGINE lamp off | The Exchange is loaded but not being processed (device deactivated, master track frozen). |
 | "n exchanges – only the oldest is active" | Several Exchange instances: switch the extra ones to Line or remove them. |
 | No processing although the engine runs | Direct on? Amount at 0? EQ/HPF/Gain lamps off? Hold on? |
-| Track missing from the overview | The instance runs in a different process (sandbox/bridge) – run all plug-ins in the same process in Live. |
+| Track missing from the overview | The status line tooltip shows the link: "this process only" = shared memory not available → run plug-ins in the same process. If the instance runs in a helper process AME does not attribute to the DAW, set the same environment variable `AME_HUB_SESSION` for all processes. |
+| Track stays listed after a plug-in process crashed | Removed automatically within one second. |
 | Auto-ID wrong | Give tracks clear names or set the role manually. |
 | Track names "Line 01" … | The DAW does not send a name – set the role manually. |
 
 ## About AME
 
-**AME – Adaptive Mix Exchange**, version 0.8.1
+**AME – Adaptive Mix Exchange**, version 0.9.0
 
 Built by **Batze the bit builder**.
 
-- Framework: JUCE 8 (C++20), VST3 format, Windows / Ableton Live.
+- Framework: JUCE 8 (C++20), VST3 format, Windows (tested with Ableton Live).
 - Fonts: Abril Fatface, Bebas Neue, Courier Prime – SIL Open Font License.
 - **License: GNU Affero General Public License v3 (AGPLv3)** – free, open software. You may use, modify and share AME, also commercially. Anyone distributing a modified version must publish its source code under the AGPLv3 as well. AME comes without any warranty.
 - Source code: [github.com/BatzeBitBuilder/AME-Adaptive-Mix-Exchange](https://github.com/BatzeBitBuilder/AME-Adaptive-Mix-Exchange)

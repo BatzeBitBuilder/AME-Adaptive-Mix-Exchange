@@ -1,6 +1,6 @@
 # AME – Adaptive Mix Exchange
 
-**Handbuch · Version 0.8.1** · entwickelt von **Batze the bit builder**
+**Handbuch · Version 0.9.0** · entwickelt von **Batze the bit builder**
 
 *Every track finds its aim.* – Jede Spur bekommt ihren Platz.
 
@@ -26,6 +26,8 @@ AME ist ein vernetzter Channelstrip (VST3). Jede Instanz auf einer Spur heißt *
 4. AME erscheint unter dem Hersteller **Batze the bit builder**.
 
 Bestehende Live-Sets mit früheren Versionen laden weiter: Parameter-IDs und Speicherformat sind unverändert.
+
+**Andere DAWs:** AME läuft in jeder Windows-DAW mit VST3 (z. B. Cubase, Studio One, Reaper, FL Studio, Bitwig). Die Instanzen finden sich über gemeinsamen Speicher der DAW-Sitzung – auch dann, wenn die DAW Plug-ins in getrennten Prozessen betreibt (Sandbox, Bridge, z. B. Bitwig „Individually“). Getestet ist bisher Ableton Live.
 
 ## Schnellstart
 
@@ -214,17 +216,18 @@ Typischer Ablauf: Programm wählen → Song einige Male durchlaufen lassen → m
 | Lampe ENGINE aus | Exchange ist geladen, wird aber nicht verarbeitet (Gerät deaktiviert, Master-Spur eingefroren). |
 | „n Exchanges – nur das älteste ist aktiv" | Mehrere Exchange-Instanzen: überzählige auf Line stellen oder entfernen. |
 | Keine Eingriffe trotz Engine | Direkt aktiv? Amount auf 0? Lampen EQ/HPF/Gain aus? Hold aktiv? |
-| Spur fehlt in der Übersicht | Instanz läuft in einem anderen Prozess (Sandbox/Bridge) – in Live alle Plug-ins im selben Prozess betreiben. |
+| Spur fehlt in der Übersicht | Tooltip der Statuszeile zeigt die Verbindung: „nur innerhalb dieses Prozesses“ = gemeinsamer Speicher nicht verfügbar → Plug-ins im selben Prozess betreiben. Läuft die Instanz in einem Hilfsprozess, den AME nicht der DAW zuordnet, in allen Prozessen dieselbe Umgebungsvariable `AME_HUB_SESSION` setzen. |
+| Spur bleibt nach Absturz eines Plug-in-Prozesses stehen | Wird nach spätestens einer Sekunde automatisch entfernt. |
 | Auto-Kennung falsch | Spurnamen eindeutig benennen oder Rolle manuell setzen. |
 | Spurnamen „Line 01" … | Die DAW übermittelt keinen Namen – Rolle manuell setzen. |
 
 ## Über AME
 
-**AME – Adaptive Mix Exchange**, Version 0.8.1
+**AME – Adaptive Mix Exchange**, Version 0.9.0
 
 Entwickelt von **Batze the bit builder**.
 
-- Framework: JUCE 8 (C++20), Format VST3, Windows / Ableton Live.
+- Framework: JUCE 8 (C++20), Format VST3, Windows (getestet mit Ableton Live).
 - Schriften: Abril Fatface, Bebas Neue, Courier Prime – SIL Open Font License.
 - **Lizenz: GNU Affero General Public License v3 (AGPLv3)** – freie, offene Software. Du darfst AME nutzen, verändern und weitergeben, auch kommerziell. Wer eine veränderte Fassung weitergibt, muss deren Quellcode ebenfalls unter AGPLv3 offenlegen. AME wird ohne jede Gewährleistung bereitgestellt.
 - Quellcode: [github.com/BatzeBitBuilder/AME-Adaptive-Mix-Exchange](https://github.com/BatzeBitBuilder/AME-Adaptive-Mix-Exchange)

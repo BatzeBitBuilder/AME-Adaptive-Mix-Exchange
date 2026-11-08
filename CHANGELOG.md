@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0 – 2026-11-08 (Roadmap Schritt 6: prozessübergreifender Hub)
+- MixHub liegt jetzt im Named Shared Memory der DAW-Sitzung (Windows `CreateFileMapping` + benannter Mutex, POSIX `shm_open` + robuster Prozess-Mutex) → Instanzen sehen sich auch in getrennten Plug-in-Prozessen (Bitwig-Sandbox, Reaper „separate process“, FL-Bridge …)
+- Sitzung = DAW-Prozess: Hilfsprozesse (Plugin-Host, Audio-Engine, Bridge) werden im Prozessbaum bis zur DAW zurückverfolgt; mehrere gleichzeitig laufende DAWs bleiben getrennt; Override per Umgebungsvariable `AME_HUB_SESSION`
+- Instanzen abgestürzter Prozesse werden nach ≤ 1 s automatisch abgemeldet
+- Fallback: ohne Shared Memory wie bisher nur innerhalb des Prozesses; verschiedene AME-Versionen teilen keinen Speicher (Layout-Version im Namen)
+- Statuszeile: Tooltip zeigt die Verbindung (Shared Memory, Sitzung, Anzahl Prozesse)
+- Handbuch: andere DAWs, Fehlersuche ergänzt
+- Smoke-Test: Kindprozess mit eigener Line (Analyse, Rolle, Engine-Zielwerte über Prozessgrenze), Absturz-Aufräumen
+
 ## 0.8.1 – 2026-11-08 (Open Source, AGPLv3)
 - Lizenz: GNU AGPLv3 (`LICENSE`), JUCE unter dessen AGPLv3-Option
 - `THIRD_PARTY_NOTICES.md`: JUCE (AGPLv3), VST 3 SDK (MIT), Schriften (OFL), VST-Markenhinweis

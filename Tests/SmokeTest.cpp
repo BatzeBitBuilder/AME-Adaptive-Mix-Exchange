@@ -188,9 +188,98 @@ static void testRoleDetection()
     }
 }
 
+// --- Schritt 6: prozessübergreifender Hub (Shared Memory) ---
+// Kindprozess: eine Bass-Line in einem eigenen Prozess (wie Plugin-Sandbox/Bridge), endet ohne Abmeldung (Absturz)
+static int runHubChild()
+{
+    auto line = std::make_unique<MultiTrackMixProcessor>();
+    line->setPlayConfigDetails (2, 2, 48000.0, 512);
+    line->prepareToPlay (48000.0, 512);
+    juce::AudioProcessor::TrackProperties tp;
+    tp.name = juce::String ("Child Bass");
+    line->updateTrackProperties (tp);
+
+    TestSignal sig { { { 55.0f, 0.3f }, { 82.0f, 0.3f } }, 0.0f };
+    bool engine = false, targets = false;
+    for (int i = 0; i < 60; ++i)    // ~3 s
+    {
+        runBlocks (*line, sig, 5);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+        engine = engine || line->getHub().isEngineAlive();
+        if (auto* d = line->getHub().getAudioData (line->getSlot()))
+            targets = targets || d->targetHpfHz.load() > 0.0f || std::abs (d->targetGainDb.load()) > 0.01f;
+    }
+
+    auto& hub = line->getHub();
+    std::cout << "CHILD shared=" << (hub.isShared() ? 1 : 0) << " seen=" << hub.getNumInstances()
+              << " masters=" << hub.getNumMasters() << " engine=" << (engine ? 1 : 0)
+              << " targets=" << (targets ? 1 : 0) << std::endl;
+    std::_Exit (0);   // Absturz simulieren: keine Abmeldung
+}
+
+static void testCrossProcessHub (MixHub& hub, const std::function<void()>& tick)
+{
+    std::cout << "Hub prozessübergreifend:\n";
+    CHECK (hub.isShared());
+    const int before = hub.getNumInstances();
+
+    juce::ChildProcess child;
+    const auto exe = juce::File::getSpecialLocation (juce::File::currentExecutableFile).getFullPathName();
+    CHECK (child.start (juce::StringArray { exe, "--hub-child" }, juce::ChildProcess::wantStdOut));
+
+    bool seen = false, analysed = false;
+    int procs = 0;
+    for (int i = 0; i < 200 && ! (seen && analysed); ++i)
+    {
+        tick();
+        for (const auto& t : hub.getSnapshot())
+            if (t.name == "Child Bass")
+            {
+                seen = true;
+                analysed = t.hasAnalysis && t.role == Role::Bass;
+            }
+        procs = juce::jmax (procs, hub.getNumProcesses());
+    }
+
+    const auto out = child.readAllProcessOutput();
+    child.waitForProcessToFinish (5000);   // Prozess abholen (sonst Zombie = "lebt")
+    std::cout << "  " << out.trim() << "  (Sitzung " << hub.getSessionKey() << ", Prozesse " << procs << ")\n";
+    CHECK (seen && analysed);
+    CHECK (procs == 2);
+    CHECK (out.contains ("shared=1"));
+    CHECK (out.contains ("seen=" + juce::String (before + 1)));
+    CHECK (out.contains ("masters=1"));
+    CHECK (out.contains ("engine=1"));
+    CHECK (out.contains ("targets=1"));
+
+    // Kind ist ohne Abmeldung beendet → Slot wird nach spätestens ~1 s freigegeben
+    int after = -1;
+    for (int i = 0; i < 60 && after != before; ++i)
+    {
+        tick();
+        after = hub.getNumInstances();
+    }
+    CHECK (after == before);
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI init;
+
+    // eigene Hub-Sitzung, damit der Test nie mit einer laufenden DAW kollidiert (Kindprozess erbt sie)
+    if (juce::SystemStats::getEnvironmentVariable ("AME_HUB_SESSION", {}).isEmpty())
+    {
+        const auto key = "smoketest" + juce::String (juce::Time::currentTimeMillis());
+       #if JUCE_WINDOWS
+        _putenv_s ("AME_HUB_SESSION", key.toRawUTF8());
+       #else
+        setenv ("AME_HUB_SESSION", key.toRawUTF8(), 1);
+       #endif
+    }
+
+    if (argc > 1 && juce::String (argv[1]) == "--hub-child")
+        return runHubChild();
+
     const juce::File outDir = argc > 1 ? juce::File (argv[1]) : juce::File::getCurrentWorkingDirectory();
     mtm::i18n::setLanguageForTesting (mtm::i18n::Language::German);
 
@@ -408,6 +497,9 @@ int main (int argc, char** argv)
     CHECK (master->isActiveMaster());
     CHECK (! master2->isActiveMaster());
     master2.reset();
+    CHECK (kick->getHub().getNumInstances() == 4);
+
+    testCrossProcessHub (kick->getHub(), [&] { runAll (2); juce::MessageManager::getInstance()->runDispatchLoopUntil (20); });
     CHECK (kick->getHub().getNumInstances() == 4);
 
     // UI-Snapshots

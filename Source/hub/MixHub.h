@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <memory>
 #include <vector>
 
 #include "Roles.h"
@@ -115,10 +116,52 @@ struct TrackSnapshot
     bool autoFromName = false;
 };
 
-// Prozessweites Register aller Plugin-Instanzen (über juce::SharedResourcePointer geteilt).
-// Fallback über Shared Memory für getrennte Prozesse folgt in Schritt 5.
+// Anmeldedaten einer Instanz (im gemeinsamen Speicher: nur feste Größen, keine juce::String)
+struct HubSlotInfo
+{
+    bool used = false;
+    uint32_t instanceId = 0;
+    uint32_t ownerPid = 0;          // Prozess der Instanz (Aufräumen nach Absturz)
+    char name[128] {};              // UTF-8
+    uint32_t colourArgb = 0;
+    int32_t role = 0, mode = 0;
+    bool autoRole = false, autoFromName = false;
+    float autoConfidence = 0.0f;
+};
+
+// Gesamter Hub-Zustand. Liegt im Named Shared Memory (prozessübergreifend) oder – falls das
+// nicht möglich ist – im Prozess. Nur lock-freie Atomics und POD, damit er zwischen Prozessen teilbar ist.
+struct HubShared
+{
+    std::atomic<int>      globalGenre { 0 };
+    std::atomic<float>    globalAmount { 1.0f };
+    std::atomic<bool>     globalBypass { false };
+    std::atomic<uint32_t> freezeCommandGen { 0 };
+    std::atomic<bool>     freezeCommandValue { false };
+    std::atomic<uint32_t> engineHeartbeatMs { 0 };
+
+    uint32_t nextInstanceId = 1;    // nur unter Hub-Sperre
+    std::array<HubSlotInfo, kMaxSlots> infos {};
+    std::array<SlotAudioData, kMaxSlots> audio;
+};
+
+static_assert (std::atomic<float>::is_always_lock_free && std::atomic<uint32_t>::is_always_lock_free
+                && std::atomic<int>::is_always_lock_free && std::atomic<bool>::is_always_lock_free,
+               "Hub-Atomics müssen lock-frei sein (Shared Memory)");
+
+// Register aller Plugin-Instanzen. Pro Prozess ein Objekt (juce::SharedResourcePointer); die Daten liegen im
+// Named Shared Memory der DAW-Sitzung, damit sich auch Instanzen in getrennten Prozessen sehen
+// (Plugin-Sandbox, Bridge). Sitzung = DAW-Prozess (Hilfsprozesse werden bis zur DAW zurückverfolgt),
+// überschreibbar mit der Umgebungsvariable AME_HUB_SESSION. Fallback: nur im eigenen Prozess.
 class MixHub
 {
+public:
+    class Connection;   // Shared Memory / lokaler Fallback (MixHub.cpp)
+
+private:
+    std::unique_ptr<Connection> conn;
+    HubShared& shared;
+
 public:
     MixHub();
     ~MixHub();
@@ -133,25 +176,30 @@ public:
     int  getNumMasters() const;
     uint32_t getActiveMasterId() const;  // 0 = kein Master; bei mehreren gilt der älteste
 
+    // Verbindung
+    bool isShared() const noexcept;                 // true = Shared Memory (prozessübergreifend)
+    juce::String getSessionKey() const;             // z. B. PID der DAW
+    int  getNumProcesses() const;                   // Prozesse mit angemeldeten Instanzen
+
     // Echtzeit-sicher
     SlotAudioData* getAudioData (int slot) noexcept;
 
     // Globale Einstellungen, geschrieben vom aktiven Master
-    std::atomic<int>   globalGenre  { 0 };
-    std::atomic<float> globalAmount { 1.0f };
-    std::atomic<bool>  globalBypass { false };
+    std::atomic<int>&   globalGenre  { shared.globalGenre };
+    std::atomic<float>& globalAmount { shared.globalAmount };
+    std::atomic<bool>&  globalBypass { shared.globalBypass };
 
     // Befehl "Alle einfrieren / lösen" vom Master: Spuren reagieren, wenn sich die Generation ändert
-    std::atomic<uint32_t> freezeCommandGen { 0 };
-    std::atomic<bool>     freezeCommandValue { false };
+    std::atomic<uint32_t>& freezeCommandGen   { shared.freezeCommandGen };
+    std::atomic<bool>&     freezeCommandValue { shared.freezeCommandValue };
     void sendFreezeCommand (bool freeze) noexcept
     {
         freezeCommandValue.store (freeze);
         freezeCommandGen.fetch_add (1);
     }
 
-    // Lebenszeichen der Engine (Millisekunden-Zähler); veraltet = keine adaptiven Eingriffe
-    std::atomic<uint32_t> engineHeartbeatMs { 0 };
+    // Lebenszeichen der Engine (Millisekunden-Zähler, systemweit); veraltet = keine adaptiven Eingriffe
+    std::atomic<uint32_t>& engineHeartbeatMs { shared.engineHeartbeatMs };
     bool isEngineAlive() const noexcept
     {
         const auto hb = engineHeartbeatMs.load (std::memory_order_relaxed);
@@ -159,22 +207,9 @@ public:
     }
 
 private:
-    struct SlotInfo
-    {
-        bool used = false;
-        uint32_t instanceId = 0;
-        juce::String name;
-        juce::Colour colour;
-        Role role = Role::Auto;
-        InstanceMode mode = InstanceMode::Track;
-        bool autoRole = false, autoFromName = false;
-        float autoConfidence = 0.0f;
-    };
-
-    mutable juce::CriticalSection lock;
-    std::array<SlotInfo, kMaxSlots> infos;
-    std::array<SlotAudioData, kMaxSlots> audio;
-    uint32_t nextInstanceId = 1;
+    void purgeDeadOwners (bool force) const;       // unter Sperre aufrufen
+    mutable uint32_t lastPurgeMs = 0;
+    uint32_t ownPid = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MixHub)
 };

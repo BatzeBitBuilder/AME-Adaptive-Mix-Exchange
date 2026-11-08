@@ -57,7 +57,7 @@ Source/
   Parameters.*        Parameter-IDs und -Layout
   Roles.h             Rollen, Genres, Modi (Namen DE/EN)
   i18n/Lang.*         UI-Sprache (global, gespeichert), tr("de", "en")
-  hub/MixHub.*        Prozessweites Instanz-Register (lock-free Audio-Daten)
+  hub/MixHub.*        Instanz-Register im Shared Memory der DAW-Sitzung (prozessübergreifend, lock-free Audio-Daten)
   dsp/ChannelStrip.*  HPF/LPF, 4-Band-EQ, Kompressor, Width/Pan
   dsp/Biquad.h        RBJ-Biquad
   dsp/SpectrumAnalyzer.*  FFT-Analyse -> 32 Bänder

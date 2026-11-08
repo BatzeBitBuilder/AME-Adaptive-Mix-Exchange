@@ -237,7 +237,14 @@ void MultiTrackMixEditor::timerCallback()
     }
 
     statusLabel.setText (status, juce::dontSendNotification);
-    statusLabel.setTooltip (status);
+
+    // Tooltip: Art der Verbindung zwischen den Instanzen
+    const int procs = hub.getNumProcesses();
+    juce::String link = hub.isShared()
+        ? tr ("Verbindung: Shared Memory, DAW-Sitzung ", "Link: shared memory, DAW session ") + hub.getSessionKey()
+              + (procs > 1 ? juce::String (MTM_TXT (" · ")) + juce::String (procs) + tr (" Prozesse", " processes") : juce::String())
+        : tr ("Verbindung: nur innerhalb dieses Prozesses", "Link: this process only");
+    statusLabel.setTooltip (status + "\n" + link);
 
     // Lampen am Schriftzug: Line verbunden / Engine aktiv / Hold
     const bool line = masters > 0;
