@@ -1,6 +1,6 @@
 # AME (Adaptive Mix Exchange) – Konzept
 
-Stand: 2026-11-08 · Version 0.8.0 (Roadmap Schritte 1–4 + Vintage-UI + Umbenennung AME + DE/EN + Handbuch)
+Stand: 2026-11-08 · Version 0.8.1 (Roadmap Schritte 1–4 + Vintage-UI + Umbenennung AME + DE/EN + Handbuch + AGPLv3)
 Entwickler: Batze the bit builder
 
 ## Ziel
@@ -11,6 +11,8 @@ VST3-Channelstrip, dessen Instanzen sich gegenseitig kennen. Anhand eines global
 |---|---|
 | Name | AME – Adaptive Mix Exchange (Vermittlungs-Metapher, siehe BRANDING.md); UI-Begriffe Line/Exchange/Programm/Vorrang/Ansprechzeit/Direkt/Hold |
 | Entwickler | Batze the bit builder (VST3-Hersteller) |
+| Lizenz | Open Source, GNU AGPLv3 (AGPL-3.0-only); JUCE unter dessen AGPLv3-Option, VST3 SDK MIT, Schriften OFL (THIRD_PARTY_NOTICES.md) |
+| Repository | GitHub BatzeBitBuilder/AME-Adaptive-Mix-Exchange (derzeit privat) |
 | Framework | JUCE (C++), CMake, Format VST3 |
 | Plattform / DAW | Windows, Ableton Live |
 | Kommunikation | C: In-Process-Singleton (primär) + Shared-Memory/IPC-Fallback |
@@ -61,12 +63,12 @@ Input-Gain → HPF/LPF → EQ (4–6 Bänder, statisch + dynamisch) → Kompress
 4. ✅ Automatische Rollenerkennung: Spurname + Klangmerkmale (v0.5.0)
    ✅ Vintage-UI (v0.6.0), Umbenennung AME (v0.7.0)
    ✅ Englische Oberfläche (umschaltbar) + Handbuch DE/EN (v0.8.0)
-5. Veröffentlichung auf GitHub (Lizenz, Repo, Release-Build, ggf. GitHub Pages)
+5. Veröffentlichung auf GitHub: ✅ privates Repo (v0.8.0), ✅ Lizenz AGPLv3 (v0.8.1); offen: Repo öffentlich, Release-Build, ggf. GitHub Actions/Pages
 6. Shared-Memory-Fallback, Feinschliff, Performance
 
 ## Offene Punkte
 - v0.8.0 in Ableton testen (DE/EN-Umschaltung mit mehreren Instanzen, Handbuch)
-- Nächster Schritt: GitHub-Veröffentlichung
+- Nächster Schritt: weitere Entwicklung; später Repo öffentlich + Release
 - Profilwerte weiter mit echtem Material feinjustieren
 - Rollenerkennung mit echtem Material prüfen (Prototypen in RoleClassifier.cpp justieren); optional ML-Klassifikator
 - Später: Shared-Memory-Fallback, LUFS-Anzeige, Stereo-Korrelation/Goniometer, skalierbares Fenster
