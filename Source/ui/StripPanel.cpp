@@ -37,6 +37,8 @@ StripPanel::StripPanel (juce::AudioProcessorValueTreeState& state, MixHub& h, in
     filter.knobs = { addKnob (pid::hpfFreq, "HPF"), addKnob (pid::lpfFreq, "LPF") };
     hpfToggle = addToggle (pid::hpfOn, "HPF");
     lpfToggle = addToggle (pid::lpfOn, "LPF");
+    hpfSlope = addChoice (pid::hpfSlope, { "12 dB", "24 dB", "48 dB" });
+    lpfSlope = addChoice (pid::lpfSlope, { "12 dB", "24 dB", "48 dB" });
 
     // Rack: Gate
     {
@@ -68,6 +70,16 @@ StripPanel::StripPanel (juce::AudioProcessorValueTreeState& state, MixHub& h, in
         m.choices = { deessMode };
         m.knobs = { addKnob (pid::deessFreq, "Freq"), addKnob (pid::deessThresh, "Thresh"), addKnob (pid::deessRange, "Range") };
     }
+    // Rack: Sättigung / Exciter
+    {
+        auto& m = addModule (pid::satOn, nullptr);
+        satOn = addToggle (pid::satOn, {});
+        satType = addChoice (pid::satType, {});
+        m.toggles = { satOn };
+        m.choices = { satType };
+        m.knobs = { addKnob (pid::satDrive, "Drive"), addKnob (pid::satMix, "Mix"),
+                    addKnob (pid::excAmount, "Exciter"), addKnob (pid::excFreq, "Exc Freq") };
+    }
     for (int i = 0; i < (int) modules.size(); ++i)
     {
         auto& tab = modules[(size_t) i]->tab;
@@ -78,10 +90,20 @@ StripPanel::StripPanel (juce::AudioProcessorValueTreeState& state, MixHub& h, in
     }
 
     // EQ
-    eq.knobs = { addKnob (pid::lsFreq, "Low Hz"),  addKnob (pid::lsGain, "Low dB"),
+    eq.knobs = { addKnob (pid::lsFreq, "Low Hz"),  addKnob (pid::lsGain, "Low dB"), addKnob (pid::lsQ, "Low Q"),
                  addKnob (pid::p1Freq, "Mid1 Hz"), addKnob (pid::p1Gain, "Mid1 dB"), addKnob (pid::p1Q, "Mid1 Q"),
                  addKnob (pid::p2Freq, "Mid2 Hz"), addKnob (pid::p2Gain, "Mid2 dB"), addKnob (pid::p2Q, "Mid2 Q"),
-                 addKnob (pid::hsFreq, "High Hz"), addKnob (pid::hsGain, "High dB") };
+                 addKnob (pid::hsFreq, "High Hz"), addKnob (pid::hsGain, "High dB"), addKnob (pid::hsQ, "High Q") };
+    lowType = addChoice (pid::lsType, {});
+    highType = addChoice (pid::hsType, {});
+    order = addChoice (pid::chainOrder, {});
+    for (auto* l : { &orderLabel, &lowTypeLabel, &highTypeLabel })
+    {
+        l->setFont (fonts::label (15.0f));
+        l->setColour (juce::Label::textColourId, colours::textDim);
+        l->setJustificationType (juce::Justification::centredRight);
+        addAndMakeVisible (*l);
+    }
     eq.title = "EQ";
 
     // OUTPUT
@@ -122,11 +144,30 @@ StripPanel::StripPanel (juce::AudioProcessorValueTreeState& state, MixHub& h, in
 void StripPanel::updateTexts()
 {
     static const std::pair<const char*, const char*> tabNames[] {
-        { "GATE", "GATE" }, { "KOMPRESSOR", "COMPRESSOR" }, { "DE-ESSER", "DE-ESSER" } };
+        { "GATE", "GATE" }, { "KOMPRESSOR", "COMPRESSOR" }, { "DE-ESSER", "DE-ESSER" }, { "SÄTTIGUNG", "SATURATION" } };
     for (size_t i = 0; i < modules.size(); ++i)
         modules[i]->tab.setButtonText (tr (tabNames[i].first, tabNames[i].second));
 
-    for (auto* t : { gateOn, compOn, deessOn })
+    auto refill = [] (juce::ComboBox& box, const juce::StringArray& items)
+    {
+        const int sel = box.getSelectedItemIndex();
+        box.clear (juce::dontSendNotification);
+        box.addItemList (items, 1);
+        box.setSelectedItemIndex (juce::jmax (0, sel), juce::dontSendNotification);
+    };
+    refill (satType->box, { tr ("Röhre", "Tube"), tr ("Band", "Tape"), "Transistor" });
+    refill (lowType->box, { "Shelf", tr ("Glocke", "Bell") });
+    refill (highType->box, { "Shelf", tr ("Glocke", "Bell") });
+    refill (order->box, { "EQ > Comp", "Comp > EQ" });
+    orderLabel.setText (tr ("Reihenfolge", "Order"), juce::dontSendNotification);
+    lowTypeLabel.setText ("Low", juce::dontSendNotification);
+    highTypeLabel.setText ("High", juce::dontSendNotification);
+    satType->box.setTooltip (tr ("Röhre: weich, gerade Obertöne. Band: weich, symmetrisch. Transistor: härter, ungerade Obertöne.",
+                                 "Tube: soft, even harmonics. Tape: soft, symmetric. Transistor: harder, odd harmonics."));
+    hpfSlope->box.setTooltip (tr ("Flankensteilheit Hochpass", "High-pass slope"));
+    lpfSlope->box.setTooltip (tr ("Flankensteilheit Tiefpass", "Low-pass slope"));
+
+    for (auto* t : { gateOn, compOn, deessOn, satOn })
         t->button.setButtonText (tr ("An", "On"));
     deessListen->button.setButtonText (tr ("Abhören", "Listen"));
     gateMode->box.setTooltip (tr ("Gate: schließt unter dem Threshold um Range. Expander: senkt leise Anteile im Verhältnis 1:2 / 1:4 ab.",
@@ -370,7 +411,7 @@ void StripPanel::resized()
         presetLabel.setBounds (r.removeFromLeft (64));
         presetBox.setBounds (r.removeFromLeft (250));
         r.removeFromLeft (10);
-        fromRoleButton.setBounds (r.removeFromLeft (290));
+        fromRoleButton.setBounds (r.removeFromLeft (250));
         presetTools = r.withTrimmedLeft (10);
     }
     area.removeFromTop (gap);
@@ -400,7 +441,10 @@ void StripPanel::resized()
         auto t = inner.removeFromTop (22);
         lpfToggle->button.setBounds (t.removeFromRight (56));
         hpfToggle->button.setBounds (t.removeFromRight (56));
-        inner.removeFromTop (26);
+        inner.removeFromTop (4);
+        auto sl = inner.removeFromTop (22);
+        hpfSlope->box.setBounds (sl.removeFromLeft (sl.getWidth() / 2).reduced (6, 0));
+        lpfSlope->box.setBounds (sl.reduced (6, 0));
         layoutKnobRow (filter.knobs, inner);
     }
     row1.removeFromLeft (gap);
@@ -410,7 +454,16 @@ void StripPanel::resized()
     {
         eq.bounds = area;
         auto inner = area.reduced (6);
-        inner.removeFromTop (22);
+        auto t = inner.removeFromTop (22);
+        highType->box.setBounds (t.removeFromRight (104).reduced (0, 1));
+        highTypeLabel.setBounds (t.removeFromRight (44));
+        t.removeFromRight (10);
+        lowType->box.setBounds (t.removeFromRight (104).reduced (0, 1));
+        lowTypeLabel.setBounds (t.removeFromRight (40));
+        t.removeFromRight (16);
+        order->box.setBounds (t.removeFromRight (136).reduced (0, 1));
+        orderLabel.setBounds (t.removeFromRight (90));
+        inner.removeFromTop (2);
         auto knobRow = inner.removeFromBottom (122);
         inner.removeFromBottom (4);
         auto wf = inner.removeFromBottom (58);
@@ -472,7 +525,10 @@ void StripPanel::paintRack (juce::Graphics& g)
     g.setFont (fonts::mono (9.0f, true));
     g.drawText ("GR", caption, juce::Justification::centred);
 
-    const float db = modules.empty() ? 0.0f : modules[(size_t) currentModule]->meterDb;
+    const auto& cur = *modules[(size_t) currentModule];
+    if (! cur.reduction)
+        return;   // Modul ohne Pegelreduktion (Sättigung): Anzeige dunkel
+    const float db = cur.meterDb;
     constexpr int segs = 12;            // 2 dB je Segment, 0 … 24 dB
     const float segH = led.getHeight() / (float) segs;
     for (int i = 0; i < segs; ++i)

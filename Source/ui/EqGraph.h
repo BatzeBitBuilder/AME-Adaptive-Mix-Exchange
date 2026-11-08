@@ -7,6 +7,7 @@
 #include <array>
 
 #include "hub/MixHub.h"
+#include "dsp/StripParams.h"
 
 namespace mtm::ui
 {
@@ -57,6 +58,7 @@ private:
     MixHub& hub;
     int slot;
 
+    StripParamReader reader;
     std::array<Node, 6> nodes;
     int dragNode = -1, hoverNode = -1;
 

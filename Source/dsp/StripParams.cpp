@@ -17,6 +17,8 @@ enum Idx
     iGateOn, iGateMode, iGateThresh, iGateRange, iGateAttack, iGateHold, iGateRelease, iGateScHpf,
     iDeessOn, iDeessMode, iDeessFreq, iDeessThresh, iDeessRange, iDeessListen,
     iPan, iWidth, iOutGain,
+    iHpfSlope, iLpfSlope, iLsType, iLsQ, iHsType, iHsQ, iOrder,
+    iSatOn, iSatType, iSatDrive, iSatMix, iExcAmount, iExcFreq,
     iCount
 };
 
@@ -27,7 +29,9 @@ const char* const ids[iCount] {
     pid::compScHpf, pid::compAutoRel,
     pid::gateOn, pid::gateMode, pid::gateThresh, pid::gateRange, pid::gateAttack, pid::gateHold, pid::gateRelease, pid::gateScHpf,
     pid::deessOn, pid::deessMode, pid::deessFreq, pid::deessThresh, pid::deessRange, pid::deessListen,
-    pid::pan, pid::width, pid::outGain
+    pid::pan, pid::width, pid::outGain,
+    pid::hpfSlope, pid::lpfSlope, pid::lsType, pid::lsQ, pid::hsType, pid::hsQ, pid::chainOrder,
+    pid::satOn, pid::satType, pid::satDrive, pid::satMix, pid::excAmount, pid::excFreq
 };
 } // namespace
 
@@ -51,7 +55,19 @@ void StripParamReader::read (ChannelStrip::Params& p) const noexcept
 
     p.eqFreq   = { get (iLsFreq), get (iP1Freq), get (iP2Freq), get (iHsFreq) };
     p.eqGainDb = { get (iLsGain), get (iP1Gain), get (iP2Gain), get (iHsGain) };
-    p.eqQ      = { 0.707f, get (iP1Q), get (iP2Q), 0.707f };
+    p.eqQ      = { get (iLsQ), get (iP1Q), get (iP2Q), get (iHsQ) };
+    p.lowBell  = juce::roundToInt (get (iLsType)) == 1;
+    p.highBell = juce::roundToInt (get (iHsType)) == 1;
+    p.hpfSlope = juce::roundToInt (get (iHpfSlope));
+    p.lpfSlope = juce::roundToInt (get (iLpfSlope));
+    p.compFirst = juce::roundToInt (get (iOrder)) == 1;
+
+    p.satOn = on (iSatOn);
+    p.satType = juce::roundToInt (get (iSatType));
+    p.satDriveDb = get (iSatDrive);
+    p.satMix = get (iSatMix) * 0.01f;
+    p.excAmount = get (iExcAmount) * 0.01f;
+    p.excFreq = get (iExcFreq);
 
     p.compOn = on (iCompOn);
     p.compThreshDb = get (iCompThresh);

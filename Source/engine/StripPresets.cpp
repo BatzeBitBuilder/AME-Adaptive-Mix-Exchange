@@ -11,8 +11,9 @@ using namespace pid;
 const juce::StringArray& getSoundScope()
 {
     static const juce::StringArray s {
-        hpfOn, hpfFreq, lpfOn, lpfFreq,
-        lsFreq, lsGain, p1Freq, p1Gain, p1Q, p2Freq, p2Gain, p2Q, hsFreq, hsGain,
+        hpfOn, hpfFreq, lpfOn, lpfFreq, hpfSlope, lpfSlope,
+        lsFreq, lsGain, lsQ, lsType, p1Freq, p1Gain, p1Q, p2Freq, p2Gain, p2Q, hsFreq, hsGain, hsQ, hsType, chainOrder,
+        satOn, satType, satDrive, satMix, excAmount, excFreq,
         gateOn, gateMode, gateThresh, gateRange, gateAttack, gateHold, gateRelease, gateScHpf,
         compOn, compThresh, compRatio, compAttack, compRelease, compMakeup, compKnee, compMix, compScHpf, compAutoRel,
         deessOn, deessMode, deessFreq, deessThresh, deessRange, deessListen };
@@ -39,18 +40,21 @@ const std::vector<FactoryPreset>& getFactoryPresets()
             { lsFreq, 60 }, { lsGain, 3 }, { p1Freq, 350 }, { p1Gain, -4 }, { p1Q, 1.4f },
             { p2Freq, 3500 }, { p2Gain, 3 }, { p2Q, 1.2f },
             { gateOn, 1 }, { gateThresh, -35 }, { gateRange, 30 }, { gateAttack, 0.2f }, { gateHold, 40 }, { gateRelease, 120 },
-            { compOn, 1 }, { compThresh, -18 }, { compRatio, 4 }, { compAttack, 15 }, { compRelease, 80 }, { compKnee, 3 }, { compMakeup, 3 } } },
+            { compOn, 1 }, { compThresh, -18 }, { compRatio, 4 }, { compAttack, 15 }, { compRelease, 80 }, { compKnee, 3 }, { compMakeup, 3 },
+            { satOn, 1 }, { satType, 0 }, { satDrive, 4 } } },
         { Role::Snare, {
             { hpfOn, 1 }, { hpfFreq, 80 },
-            { lsFreq, 200 }, { lsGain, 2 }, { p1Freq, 450 }, { p1Gain, -3 }, { p1Q, 1.5f },
+            { lsFreq, 200 }, { lsGain, 2 }, { lsType, 1 }, { lsQ, 1.2f }, { p1Freq, 450 }, { p1Gain, -3 }, { p1Q, 1.5f },
             { p2Freq, 5000 }, { p2Gain, 3 }, { p2Q, 1.0f }, { hsFreq, 10000 }, { hsGain, 2 },
             { gateOn, 1 }, { gateThresh, -35 }, { gateRange, 20 }, { gateAttack, 0.2f }, { gateHold, 60 }, { gateRelease, 150 }, { gateScHpf, 150 },
-            { compOn, 1 }, { compThresh, -20 }, { compRatio, 4 }, { compAttack, 8 }, { compRelease, 100 }, { compKnee, 3 }, { compMakeup, 3 } } },
+            { compOn, 1 }, { compThresh, -20 }, { compRatio, 4 }, { compAttack, 8 }, { compRelease, 100 }, { compKnee, 3 }, { compMakeup, 3 },
+            { satOn, 1 }, { satType, 2 }, { satDrive, 3 } } },
         { Role::Drums, {
             { hpfOn, 1 }, { hpfFreq, 120 },
             { p1Freq, 400 }, { p1Gain, -2 }, { p1Q, 1.0f }, { hsFreq, 10000 }, { hsGain, 3 },
             { compOn, 1 }, { compThresh, -20 }, { compRatio, 2.5f }, { compAttack, 20 }, { compRelease, 150 }, { compKnee, 6 },
-            { compMakeup, 2 }, { compMix, 70 }, { compScHpf, 100 } } },
+            { compMakeup, 2 }, { compMix, 70 }, { compScHpf, 100 },
+            { satOn, 1 }, { satType, 1 }, { satDrive, 4 }, { satMix, 50 } } },
         { Role::Percussion, {
             { hpfOn, 1 }, { hpfFreq, 120 },
             { p1Freq, 500 }, { p1Gain, -2 }, { hsFreq, 10000 }, { hsGain, 2 },
@@ -58,13 +62,15 @@ const std::vector<FactoryPreset>& getFactoryPresets()
         { Role::Bass, {
             { hpfOn, 1 }, { hpfFreq, 30 },
             { lsFreq, 80 }, { lsGain, 2 }, { p1Freq, 250 }, { p1Gain, -3 }, { p1Q, 1.2f }, { p2Freq, 800 }, { p2Gain, 2 }, { p2Q, 1.0f },
-            { compOn, 1 }, { compThresh, -22 }, { compRatio, 4 }, { compAttack, 20 }, { compRelease, 120 }, { compKnee, 6 }, { compMakeup, 4 } } },
+            { compOn, 1 }, { compThresh, -22 }, { compRatio, 4 }, { compAttack, 20 }, { compRelease, 120 }, { compKnee, 6 }, { compMakeup, 4 },
+            { satOn, 1 }, { satType, 1 }, { satDrive, 6 }, { satMix, 60 } } },
         { Role::LeadVocal, {
             { hpfOn, 1 }, { hpfFreq, 90 },
             { p1Freq, 300 }, { p1Gain, -2 }, { p1Q, 1.0f }, { p2Freq, 3000 }, { p2Gain, 2 }, { p2Q, 1.0f },
             { hsFreq, 10000 }, { hsGain, 3 },
             { compOn, 1 }, { compThresh, -22 }, { compRatio, 3.5f }, { compAttack, 5 }, { compRelease, 80 }, { compAutoRel, 1 }, { compMakeup, 4 },
-            { deessOn, 1 }, { deessFreq, 6500 }, { deessThresh, -30 }, { deessRange, 8 } } },
+            { deessOn, 1 }, { deessFreq, 6500 }, { deessThresh, -30 }, { deessRange, 8 },
+            { satOn, 1 }, { satType, 0 }, { satDrive, 3 }, { satMix, 40 }, { excAmount, 15 }, { excFreq, 6000 } } },
         { Role::BackingVocal, {
             { hpfOn, 1 }, { hpfFreq, 150 },
             { p1Freq, 400 }, { p1Gain, -3 }, { p1Q, 1.0f }, { p2Freq, 4000 }, { p2Gain, 1 }, { hsFreq, 10000 }, { hsGain, 2 },
@@ -77,11 +83,13 @@ const std::vector<FactoryPreset>& getFactoryPresets()
         { Role::AcousticGuitar, {
             { hpfOn, 1 }, { hpfFreq, 80 },
             { p1Freq, 200 }, { p1Gain, -3 }, { p1Q, 1.0f }, { p2Freq, 5000 }, { p2Gain, 2 }, { hsFreq, 12000 }, { hsGain, 2 },
-            { compOn, 1 }, { compThresh, -22 }, { compRatio, 3 }, { compAttack, 10 }, { compRelease, 120 }, { compMakeup, 3 } } },
+            { compOn, 1 }, { compThresh, -22 }, { compRatio, 3 }, { compAttack, 10 }, { compRelease, 120 }, { compMakeup, 3 },
+            { satOn, 1 }, { satDrive, 0 }, { excAmount, 15 }, { excFreq, 5000 } } },
         { Role::Keys, {
             { hpfOn, 1 }, { hpfFreq, 60 },
             { p1Freq, 300 }, { p1Gain, -2 }, { hsFreq, 8000 }, { hsGain, 1 },
-            { compOn, 1 }, { compThresh, -20 }, { compRatio, 2 }, { compAttack, 20 }, { compRelease, 150 }, { compMakeup, 1 } } },
+            { compOn, 1 }, { compThresh, -20 }, { compRatio, 2 }, { compAttack, 20 }, { compRelease, 150 }, { compMakeup, 1 },
+            { satOn, 1 }, { satType, 1 }, { satDrive, 3 } } },
         { Role::SynthLead, {
             { hpfOn, 1 }, { hpfFreq, 100 },
             { p2Freq, 3000 }, { p2Gain, 2 },

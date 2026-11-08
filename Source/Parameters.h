@@ -34,6 +34,8 @@ inline constexpr const char* hpfOn    = "hpfOn";
 inline constexpr const char* hpfFreq  = "hpfFreq";
 inline constexpr const char* lpfOn    = "lpfOn";
 inline constexpr const char* lpfFreq  = "lpfFreq";
+inline constexpr const char* hpfSlope = "hpfSlope";
+inline constexpr const char* lpfSlope = "lpfSlope";
 
 inline constexpr const char* lsFreq   = "lsFreq";
 inline constexpr const char* lsGain   = "lsGain";
@@ -45,6 +47,18 @@ inline constexpr const char* p2Gain   = "p2Gain";
 inline constexpr const char* p2Q      = "p2Q";
 inline constexpr const char* hsFreq   = "hsFreq";
 inline constexpr const char* hsGain   = "hsGain";
+inline constexpr const char* lsType   = "lsType";
+inline constexpr const char* lsQ      = "lsQ";
+inline constexpr const char* hsType   = "hsType";
+inline constexpr const char* hsQ      = "hsQ";
+inline constexpr const char* chainOrder = "chainOrder";   // 0 = EQ → Comp, 1 = Comp → EQ
+
+inline constexpr const char* satOn     = "satOn";
+inline constexpr const char* satType   = "satType";
+inline constexpr const char* satDrive  = "satDrive";
+inline constexpr const char* satMix    = "satMix";
+inline constexpr const char* excAmount = "excAmount";
+inline constexpr const char* excFreq   = "excFreq";
 
 inline constexpr const char* compOn      = "compOn";
 inline constexpr const char* compThresh  = "compThresh";

@@ -20,10 +20,11 @@ constexpr float nodeRadius = 7.0f;
 
 EqGraph::EqGraph (juce::AudioProcessorValueTreeState& state, MixHub& h, int s)
     : apvts (state), hub (h), slot (s),
-      nodes { { { pid::lsFreq,  pid::lsGain, nullptr,  nullptr,     "L"  },
+      reader (state),
+      nodes { { { pid::lsFreq,  pid::lsGain, pid::lsQ, nullptr,     "L"  },
                 { pid::p1Freq,  pid::p1Gain, pid::p1Q, nullptr,     "1"  },
                 { pid::p2Freq,  pid::p2Gain, pid::p2Q, nullptr,     "2"  },
-                { pid::hsFreq,  pid::hsGain, nullptr,  nullptr,     "H"  },
+                { pid::hsFreq,  pid::hsGain, pid::hsQ, nullptr,     "H"  },
                 { pid::hpfFreq, nullptr,     nullptr,  pid::hpfOn,  "HP" },
                 { pid::lpfFreq, nullptr,     nullptr,  pid::lpfOn,  "LP" } } }
 {
@@ -104,26 +105,9 @@ int EqGraph::hitNode (juce::Point<float> pos) const
 
 float EqGraph::manualResponseDb (float hz) const
 {
-    constexpr double q1 = 0.5411961, q2 = 1.3065630;
-    float db = 0.0f;
-    Biquad b;
-
-    if (value (pid::hpfOn) > 0.5f)
-    {
-        b.setup (Biquad::Type::HighPass, displaySr, value (pid::hpfFreq), q1, 0); db += b.getMagnitudeDb (hz, displaySr);
-        b.setup (Biquad::Type::HighPass, displaySr, value (pid::hpfFreq), q2, 0); db += b.getMagnitudeDb (hz, displaySr);
-    }
-    if (value (pid::lpfOn) > 0.5f)
-    {
-        b.setup (Biquad::Type::LowPass, displaySr, value (pid::lpfFreq), q1, 0); db += b.getMagnitudeDb (hz, displaySr);
-        b.setup (Biquad::Type::LowPass, displaySr, value (pid::lpfFreq), q2, 0); db += b.getMagnitudeDb (hz, displaySr);
-    }
-
-    b.setup (Biquad::Type::LowShelf,  displaySr, value (pid::lsFreq), 0.707,             value (pid::lsGain)); db += b.getMagnitudeDb (hz, displaySr);
-    b.setup (Biquad::Type::Peak,      displaySr, value (pid::p1Freq), value (pid::p1Q),  value (pid::p1Gain)); db += b.getMagnitudeDb (hz, displaySr);
-    b.setup (Biquad::Type::Peak,      displaySr, value (pid::p2Freq), value (pid::p2Q),  value (pid::p2Gain)); db += b.getMagnitudeDb (hz, displaySr);
-    b.setup (Biquad::Type::HighShelf, displaySr, value (pid::hsFreq), 0.707,             value (pid::hsGain)); db += b.getMagnitudeDb (hz, displaySr);
-    return db;
+    ChannelStrip::Params p;
+    reader.read (p);
+    return ChannelStrip::getManualResponseDb (p, hz, displaySr);
 }
 
 void EqGraph::refresh (float dtSec)

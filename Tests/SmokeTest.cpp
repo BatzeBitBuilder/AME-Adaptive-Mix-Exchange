@@ -179,6 +179,54 @@ static void testStripModules()
         CHECK (low - lowRef > -4.0f && low - lowRef < -0.5f);
         CHECK (red > 9.0f);
     }
+
+    // Filterflanken: eine Oktave unter 400 Hz (HPF)
+    {
+        auto p = base; p.hpfOn = true; p.hpfFreq = 400.0f;
+        p.hpfSlope = 0; const float s12 = stripRmsDb (cs, p, 200.0f, 0.1f) - stripRmsDb (cs, base, 200.0f, 0.1f);
+        p.hpfSlope = 2; const float s48 = stripRmsDb (cs, p, 200.0f, 0.1f) - stripRmsDb (cs, base, 200.0f, 0.1f);
+        std::cout << "  HPF 400 Hz bei 200 Hz: 12 dB/Okt " << s12 << " dB, 48 dB/Okt " << s48 << " dB\n";
+        CHECK (s12 < -9.0f && s12 > -15.0f);
+        CHECK (s48 < -40.0f);
+        CHECK (std::abs (ChannelStrip::getManualResponseDb (p, 200.0f) - s48) < 1.5f);
+    }
+    // Low als Glocke: 1 kHz unbeeinflusst, bei Shelf angehoben
+    {
+        auto p = base; p.eqFreq[0] = 100.0f; p.eqGainDb[0] = 6.0f;
+        const float shelf = ChannelStrip::getManualResponseDb (p, 30.0f);
+        p.lowBell = true; p.eqQ[0] = 2.0f;
+        const float bell30 = ChannelStrip::getManualResponseDb (p, 30.0f), bell100 = ChannelStrip::getManualResponseDb (p, 100.0f);
+        CHECK (shelf > 5.0f && bell30 < 2.0f && std::abs (bell100 - 6.0f) < 0.2f);
+    }
+    // Reihenfolge: +12 dB EQ vor dem Kompressor wird stärker komprimiert als danach
+    {
+        auto p = base; p.compOn = true; p.compThreshDb = -30.0f; p.compRatio = 10.0f; p.eqGainDb[1] = 12.0f;
+        const float eqFirst = stripRmsDb (cs, p, 400.0f, 0.1f);
+        p.compFirst = true;
+        const float compFirst = stripRmsDb (cs, p, 400.0f, 0.1f);
+        std::cout << "  Reihenfolge EQ>Comp " << eqFirst << " dB, Comp>EQ " << compFirst << " dB\n";
+        CHECK (compFirst > eqFirst + 6.0f);
+    }
+    // Sättigung: Kleinsignal unverändert, laut begrenzt; Exciter erzeugt Höhen
+    {
+        for (int type = 0; type < 3; ++type)
+        {
+            CHECK (std::abs (ChannelStrip::saturate (type, 0.001f) - 0.001f) < 2.0e-5f);
+            CHECK (std::abs (ChannelStrip::saturate (type, 10.0f)) < 1.6f);
+        }
+        auto p = base; p.satOn = true; p.satDriveDb = 18.0f;
+        const float quiet = stripRmsDb (cs, p, 1000.0f, 0.001f) - stripRmsDb (cs, base, 1000.0f, 0.001f);
+        const float loud = stripRmsDb (cs, p, 1000.0f, 0.5f) - stripRmsDb (cs, base, 1000.0f, 0.5f);
+        p.satDriveDb = 0.0f; p.satMix = 1.0f; p.excAmount = 1.0f; p.excFreq = 3000.0f;
+        // 4 kHz-Ton: Obertöne bei 8/12 kHz → mehr Energie oberhalb; Ton allein ändert sich kaum
+        const float withExc = stripRmsDb (cs, p, 4000.0f, 0.3f);
+        p.excAmount = 0.0f;
+        const float exc = withExc - stripRmsDb (cs, p, 4000.0f, 0.3f);
+        std::cout << "  Sättigung 18 dB: leise " << quiet << " dB, laut " << loud << " dB; Exciter " << exc << " dB\n";
+        CHECK (std::abs (quiet) < 0.5f);
+        CHECK (loud < -3.0f);
+        CHECK (exc > 0.1f && exc < 6.0f);
+    }
 }
 
 // --- Schritt 4: Rollenerkennung ---

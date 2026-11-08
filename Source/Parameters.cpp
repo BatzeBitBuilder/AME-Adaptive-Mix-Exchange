@@ -100,6 +100,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     l.add (makeFloat (pid::hpfFreq, "HPF",     freqRange (20.0f, 1000.0f, 120.0f), 20.0f, "Hz"));
     l.add (makeBool  (pid::lpfOn,   "LPF On",  false));
     l.add (makeFloat (pid::lpfFreq, "LPF",     freqRange (1000.0f, 20000.0f, 6000.0f), 20000.0f, "Hz"));
+    l.add (makeChoice (pid::hpfSlope, "HPF Slope", { "12 dB/oct", "24 dB/oct", "48 dB/oct" }, 1, true));
+    l.add (makeChoice (pid::lpfSlope, "LPF Slope", { "12 dB/oct", "24 dB/oct", "48 dB/oct" }, 1, true));
 
     // EQ
     const Range gainR { -18.0f, 18.0f, 0.01f };
@@ -115,6 +117,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     l.add (makeFloat (pid::p2Q,    "Mid2 Q",     qR, 1.0f));
     l.add (makeFloat (pid::hsFreq, "High Freq",  freqRange (2000.0f, 18000.0f, 8000.0f), 8000.0f, "Hz"));
     l.add (makeFloat (pid::hsGain, "High Gain",  gainR, 0.0f, "dB"));
+    l.add (makeChoice (pid::lsType, "Low Type",  { "Shelf", "Bell" }, 0, true));
+    l.add (makeFloat  (pid::lsQ,    "Low Q",     qR, 0.707f));
+    l.add (makeChoice (pid::hsType, "High Type", { "Shelf", "Bell" }, 0, true));
+    l.add (makeFloat  (pid::hsQ,    "High Q",    qR, 0.707f));
+    l.add (makeChoice (pid::chainOrder, "Order", { "EQ > Comp", "Comp > EQ" }, 0, true));
 
     // Kompressor
     l.add (makeBool  (pid::compOn,      "Comp On",   false));
@@ -137,6 +144,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     l.add (makeFloat  (pid::gateHold,    "Gate Hold", [] { Range r { 0.0f, 500.0f }; r.setSkewForCentre (50.0f); return r; }(), 30.0f, "ms"));
     l.add (makeFloat  (pid::gateRelease, "Gate Release", [] { Range r { 5.0f, 2000.0f }; r.setSkewForCentre (150.0f); return r; }(), 150.0f, "ms"));
     l.add (makeFloat  (pid::gateScHpf,   "Gate SC HPF", freqRange (20.0f, 2000.0f, 150.0f), 20.0f, "Hz"));
+
+    // Sättigung / Exciter
+    l.add (makeBool   (pid::satOn,     "Saturation On", false));
+    l.add (makeChoice (pid::satType,   "Saturation Type", { "Tube", "Tape", "Transistor" }, 0, true));
+    l.add (makeFloat  (pid::satDrive,  "Drive", { 0.0f, 24.0f, 0.1f }, 6.0f, "dB"));
+    l.add (makeFloat  (pid::satMix,    "Saturation Mix", { 0.0f, 100.0f, 0.1f }, 100.0f, "%"));
+    l.add (makeFloat  (pid::excAmount, "Exciter", { 0.0f, 100.0f, 0.1f }, 0.0f, "%"));
+    l.add (makeFloat  (pid::excFreq,   "Exciter Freq", freqRange (2000.0f, 12000.0f, 5000.0f), 5000.0f, "Hz"));
 
     // De-Esser
     l.add (makeBool   (pid::deessOn,     "De-Esser On", false));

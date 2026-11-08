@@ -30,7 +30,10 @@ void ChannelStrip::prepare (double sampleRate, int numChannels)
 
 void ChannelStrip::reset()
 {
-    hpf.reset(); hpf2.reset(); lpf.reset(); lpf2.reset();
+    for (auto& b : hpf) b.reset();
+    for (auto& b : lpf) b.reset();
+    excHp.reset(); excHp2.reset(); excApplied = -1.0f;
+    dcX = {}; dcY = {};
     for (auto& b : eq) b.reset();
     aHpf.reset();
     for (auto& b : aEq) { b.reset(); b.setup (Biquad::Type::Peak, sr, 1000.0, kAdaptiveQ, 0.0); }
@@ -43,18 +46,83 @@ void ChannelStrip::reset()
     deessHp.reset(); deessHp2.reset(); deessLp.reset(); deessLp2.reset(); deessDetEnv = 0.0f; deessRedDb = 0.0f;
 }
 
+namespace
+{
+// Butterworth-Güten je Kaskade: 12 / 24 / 48 dB/Okt.
+constexpr double kBwQ[3][4] { { 0.7071068, 0, 0, 0 },
+                              { 0.5411961, 1.3065630, 0, 0 },
+                              { 0.5097956, 0.6013449, 0.8999762, 2.5629154 } };
+constexpr int kBwStages[3] { 1, 2, 4 };
+
+Biquad::Type lowType (bool bell)  { return bell ? Biquad::Type::Peak : Biquad::Type::LowShelf; }
+Biquad::Type highType (bool bell) { return bell ? Biquad::Type::Peak : Biquad::Type::HighShelf; }
+}
+
 void ChannelStrip::updateFilters (const Params& p) noexcept
 {
-    constexpr double q1 = 0.5411961, q2 = 1.3065630;  // Butterworth 4. Ordnung
-
     const auto hf = hpfF.getNextValue(), lf = lpfF.getNextValue();
-    if (p.hpfOn) { hpf.setup (Biquad::Type::HighPass, sr, hf, q1, 0); hpf2.setup (Biquad::Type::HighPass, sr, hf, q2, 0); }
-    if (p.lpfOn) { lpf.setup (Biquad::Type::LowPass,  sr, lf, q1, 0); lpf2.setup (Biquad::Type::LowPass,  sr, lf, q2, 0); }
+    const int hs = juce::jlimit (0, 2, p.hpfSlope), ls = juce::jlimit (0, 2, p.lpfSlope);
 
-    static constexpr Biquad::Type types[4] { Biquad::Type::LowShelf, Biquad::Type::Peak,
-                                             Biquad::Type::Peak, Biquad::Type::HighShelf };
+    if (kBwStages[hs] != hpfStages) { hpfStages = kBwStages[hs]; for (auto& b : hpf) b.reset(); }
+    if (kBwStages[ls] != lpfStages) { lpfStages = kBwStages[ls]; for (auto& b : lpf) b.reset(); }
+
+    if (p.hpfOn)
+        for (int i = 0; i < hpfStages; ++i)
+            hpf[(size_t) i].setup (Biquad::Type::HighPass, sr, hf, kBwQ[hs][i], 0);
+    if (p.lpfOn)
+        for (int i = 0; i < lpfStages; ++i)
+            lpf[(size_t) i].setup (Biquad::Type::LowPass, sr, lf, kBwQ[ls][i], 0);
+
+    const Biquad::Type types[4] { lowType (p.lowBell), Biquad::Type::Peak, Biquad::Type::Peak, highType (p.highBell) };
     for (size_t b = 0; b < 4; ++b)
         eq[b].setup (types[b], sr, eqF[b].getNextValue(), eqQ[b].getNextValue(), eqG[b].getNextValue());
+}
+
+float ChannelStrip::getManualResponseDb (const Params& p, float hz, double rate) noexcept
+{
+    float db = 0.0f;
+    Biquad b;
+    const int hs = juce::jlimit (0, 2, p.hpfSlope), ls = juce::jlimit (0, 2, p.lpfSlope);
+    if (p.hpfOn)
+        for (int i = 0; i < kBwStages[hs]; ++i)
+        {
+            b.setup (Biquad::Type::HighPass, rate, p.hpfFreq, kBwQ[hs][i], 0);
+            db += b.getMagnitudeDb (hz, rate);
+        }
+    if (p.lpfOn)
+        for (int i = 0; i < kBwStages[ls]; ++i)
+        {
+            b.setup (Biquad::Type::LowPass, rate, p.lpfFreq, kBwQ[ls][i], 0);
+            db += b.getMagnitudeDb (hz, rate);
+        }
+
+    const Biquad::Type types[4] { lowType (p.lowBell), Biquad::Type::Peak, Biquad::Type::Peak, highType (p.highBell) };
+    for (size_t k = 0; k < 4; ++k)
+    {
+        b.setup (types[k], rate, p.eqFreq[k], p.eqQ[k], p.eqGainDb[k]);
+        db += b.getMagnitudeDb (hz, rate);
+    }
+    return db;
+}
+
+float ChannelStrip::saturate (int type, float x) noexcept
+{
+    switch (type)
+    {
+        case 0:   // Röhre: asymmetrisch (gerade Obertöne), Steigung 1 im Nullpunkt
+        {
+            constexpr float bias = 0.25f;
+            static const float t0 = std::tanh (bias), norm = 1.0f / (1.0f - t0 * t0);
+            return (std::tanh (x + bias) - t0) * norm;
+        }
+        case 2:   // Transistor: kubische Kennlinie, härterer Knick
+        {
+            const float u = juce::jlimit (-1.0f, 1.0f, x * (2.0f / 3.0f));
+            return 1.5f * (u - u * u * u / 3.0f) * 1.0f;
+        }
+        default:  // Band: weich symmetrisch
+            return std::tanh (x);
+    }
 }
 
 void ChannelStrip::updateAdaptiveFilters() noexcept
@@ -134,6 +202,17 @@ void ChannelStrip::processPre (juce::AudioBuffer<float>& buffer, const Params& p
     const int gHold = (int) (p.gateHoldMs * 0.001f * (float) sr);
     const float gRatio = p.gateMode == 2 ? 4.0f : 2.0f;
 
+    // Sättigung
+    const float satG = dbToGain (juce::jlimit (0.0f, 36.0f, p.satDriveDb)), satInv = 1.0f / satG;
+    const float satMix = juce::jlimit (0.0f, 1.0f, p.satMix);
+    const bool excOn = p.satOn && p.excAmount > 0.001f;
+    if (excOn && std::abs (p.excFreq - excApplied) > 1.0f)
+    {
+        excHp.setup (Biquad::Type::HighPass, sr, p.excFreq, 0.7071, 0);
+        excHp2.setup (Biquad::Type::HighPass, sr, p.excFreq * 0.8f, 0.7071, 0);
+        excApplied = p.excFreq;
+    }
+
     // De-Esser
     const float dDetRel = coefFor (15.0f, sr);
     const float dAtt = coefFor (1.0f, sr), dRel = coefFor (80.0f, sr);
@@ -161,8 +240,10 @@ void ChannelStrip::processPre (juce::AudioBuffer<float>& buffer, const Params& p
             float l = L[i] * gIn * (p.phaseL ? -1.0f : 1.0f);
             float r = R != nullptr ? R[i] * gIn * (p.phaseR ? -1.0f : 1.0f) : 0.0f;
 
-            if (p.hpfOn) { l = hpf2.process (hpf.process (l, 0), 0); if (R) r = hpf2.process (hpf.process (r, 1), 1); }
-            if (p.lpfOn) { l = lpf2.process (lpf.process (l, 0), 0); if (R) r = lpf2.process (lpf.process (r, 1), 1); }
+            if (p.hpfOn)
+                for (int k = 0; k < hpfStages; ++k) { l = hpf[(size_t) k].process (l, 0); if (R) r = hpf[(size_t) k].process (r, 1); }
+            if (p.lpfOn)
+                for (int k = 0; k < lpfStages; ++k) { l = lpf[(size_t) k].process (l, 0); if (R) r = lpf[(size_t) k].process (r, 1); }
 
             // --- Gate / Expander ---
             if (p.gateOn)
@@ -206,11 +287,16 @@ void ChannelStrip::processPre (juce::AudioBuffer<float>& buffer, const Params& p
                 gateGainDb = 0.0f;
             }
 
-            for (auto& b : eq)
+            auto runEq = [&]
             {
-                l = b.process (l, 0);
-                if (R) r = b.process (r, 1);
-            }
+                for (auto& b : eq)
+                {
+                    l = b.process (l, 0);
+                    if (R) r = b.process (r, 1);
+                }
+            };
+            if (! p.compFirst)
+                runEq();
 
             // --- Kompressor ---
             const float mk = dbToGain (makeup.getNextValue());
@@ -256,6 +342,9 @@ void ChannelStrip::processPre (juce::AudioBuffer<float>& buffer, const Params& p
                 compFastDb = compSlowDb = compEnvDb;
             }
 
+            if (p.compFirst)
+                runEq();
+
             // --- De-Esser ---
             if (p.deessOn)
             {
@@ -284,6 +373,37 @@ void ChannelStrip::processPre (juce::AudioBuffer<float>& buffer, const Params& p
             else
             {
                 deessRedDb = 0.0f;
+            }
+
+            // --- Sättigung / Exciter ---
+            if (p.satOn)
+            {
+                const float in[2] { l, r };
+                float out[2] {};
+                for (int ch = 0; ch < (R ? 2 : 1); ++ch)
+                {
+                    const float x = in[ch];
+                    float wet = saturate (p.satType, x * satG) * satInv;
+                    if (p.satType == 0)   // Gleichanteil der Röhre entfernen
+                    {
+                        const float y = wet - dcX[(size_t) ch] + 0.9995f * dcY[(size_t) ch];
+                        dcX[(size_t) ch] = wet; dcY[(size_t) ch] = y;
+                        wet = y;
+                    }
+                    float y = x + satMix * (wet - x);
+
+                    if (excOn)
+                    {
+                        // Exciter: Obertöne nur aus dem Höhenband, danach erneut hochpassgefiltert
+                        const float h = excHp.process (x, ch);
+                        // gerade Obertöne (Quadrat: 2. Harmonische + Gleichanteil, Hochpass entfernt ihn), begrenzt
+                        const float e = std::tanh (4.0f * h);
+                        y += p.excAmount * 0.5f * excHp2.process (e * e, ch);
+                    }
+                    out[ch] = y;
+                }
+                l = out[0];
+                if (R) r = out[1];
             }
 
             L[i] = l;

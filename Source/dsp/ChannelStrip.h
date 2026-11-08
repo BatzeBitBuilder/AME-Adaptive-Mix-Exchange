@@ -12,7 +12,8 @@
 namespace mtm
 {
 // Signalkette:
-//   processPre:  Input -> Phase -> HPF/LPF -> Gate/Expander -> EQ (LS, P1, P2, HS) -> Kompressor -> De-Esser
+//   processPre:  Input -> Phase -> HPF/LPF -> Gate/Expander -> EQ <-> Kompressor (Reihenfolge wählbar)
+//                -> De-Esser -> Sättigung/Exciter
 //   [Analyse-Abgriff]
 //   processPost: Adaptiv (HPF, 10 Oktav-Bänder, Gain) -> Width/Pan -> Output
 class ChannelStrip
@@ -24,11 +25,14 @@ public:
         bool  phaseL = false, phaseR = false;
         bool  hpfOn = false;  float hpfFreq = 20.0f;
         bool  lpfOn = false;  float lpfFreq = 20000.0f;
+        int   hpfSlope = 1, lpfSlope = 1;      // 0 = 12, 1 = 24, 2 = 48 dB/Okt.
 
         // EQ-Bänder: 0 = Low Shelf, 1 = Mid1, 2 = Mid2, 3 = High Shelf
         std::array<float, 4> eqFreq { 100.0f, 400.0f, 2500.0f, 8000.0f };
         std::array<float, 4> eqGainDb {};
         std::array<float, 4> eqQ { 0.707f, 1.0f, 1.0f, 0.707f };
+        bool  lowBell = false, highBell = false;   // Low/High als Glocke statt Shelf
+        bool  compFirst = false;                   // Reihenfolge Comp -> EQ
 
         bool  compOn = false;
         float compThreshDb = -18.0f, compRatio = 3.0f, compAttackMs = 10.0f,
@@ -40,6 +44,10 @@ public:
         int   gateMode = 0;          // 0 = Gate, 1 = Expander 1:2, 2 = Expander 1:4
         float gateThreshDb = -50.0f, gateRangeDb = 40.0f, gateAttackMs = 0.5f, gateHoldMs = 30.0f,
               gateReleaseMs = 150.0f, gateScHpfHz = 20.0f;
+
+        bool  satOn = false;
+        int   satType = 0;           // 0 = Röhre, 1 = Band, 2 = Transistor
+        float satDriveDb = 6.0f, satMix = 1.0f, excAmount = 0.0f, excFreq = 5000.0f;
 
         bool  deessOn = false, deessWide = false, deessListen = false;
         float deessFreq = 6500.0f, deessThreshDb = -30.0f, deessRangeDb = 8.0f;
@@ -63,6 +71,12 @@ public:
     float getGateReductionDb() const noexcept { return -gateGainDb; }      // >= 0
     float getDeessReductionDb() const noexcept { return deessRedDb; }      // >= 0
 
+    // Frequenzgang von Filtern + EQ (für die Anzeige)
+    static float getManualResponseDb (const Params&, float freq, double sampleRate = 48000.0) noexcept;
+
+    // Kennlinie der Sättigung (Kleinsignal-Verstärkung 1)
+    static float saturate (int type, float x) noexcept;
+
     // Frequenzgang der adaptiven Stufe (für die Anzeige)
     static float getAdaptiveResponseDb (const std::array<float, kNumAdaptiveBands>& cutDb,
                                         float hpfHz, float gainDb, float freq) noexcept;
@@ -78,7 +92,9 @@ private:
     int channels = 2;
 
     // Manuell
-    Biquad hpf, hpf2, lpf, lpf2;            // 2 x 12 dB = 24 dB/Okt.
+    static constexpr int kMaxFilterStages = 4;          // bis 48 dB/Okt.
+    std::array<Biquad, kMaxFilterStages> hpf, lpf;
+    int hpfStages = 2, lpfStages = 2;
     std::array<Biquad, 4> eq;
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> hpfF, lpfF;
@@ -95,6 +111,11 @@ private:
     float gateDetEnv = 0.0f, gateGainDb = 0.0f;
     int gateHoldLeft = 0;
     bool gateOpen = false;
+
+    // Sättigung / Exciter
+    Biquad excHp, excHp2;
+    float excApplied = -1.0f;
+    std::array<float, 2> dcX {}, dcY {};
 
     // De-Esser
     Biquad deessHp, deessHp2, deessLp, deessLp2;   // Linkwitz-Riley 4. Ordnung (Split)

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.12.0 – 2026-11-08 (Sättigung/Exciter, EQ-Erweiterung, Reihenfolge)
+- **Sättigung / Exciter** (neues Rack-Modul): Röhre (asymmetrisch, gerade Obertöne), Band (weich), Transistor (härter); Drive 0–24 dB mit automatischem Pegelausgleich (Kleinsignal unverändert), Mix; Exciter (gerade Obertöne nur aus dem Höhenband, 2–12 kHz)
+- **EQ erweitert**: Low und High wahlweise Shelf oder Glocke, neue Regler Low Q / High Q (auch per Mausrad in der Grafik)
+- **Filter-Flanken** HPF/LPF wählbar 12 / 24 / 48 dB/Okt (Butterworth)
+- **Reihenfolge** EQ → Kompressor oder Kompressor → EQ
+- EQ-Grafik zeigt Flanken und Bandtypen exakt (gemeinsame Berechnung mit dem DSP)
+- Werkspresets ergänzt: Sättigung bei Kick, Snare, Drums, Bass, Lead Vocal, Keys; Exciter bei Lead Vocal und Akustikgitarre; Snare-Low als Glocke
+- Alte Live-Sets: Standardwerte entsprechen dem bisherigen Klang (Shelf, Q 0,71, 24 dB/Okt, EQ → Comp, Sättigung aus)
+- Smoke-Test: Flanken, Glocke/Shelf, Reihenfolge, Sättigung (Kleinsignal/Begrenzung), Exciter
+
 ## 0.11.0 – 2026-11-08 (Werkspresets je Rolle)
 - **Werkspresets je Rolle** (16): Startwerte für Filter, EQ, Gate, Kompressor und De-Esser, z. B. Kick (Gate + Punch-EQ), Lead Vocal (3,5:1, Auto-Release, De-Esser), Bass (4:1); Input, Phase und Output bleiben unverändert
 - **Preset-Leiste** über dem Modul-Rack: Auswahl der Werkspresets, Anzeige des geladenen Presets (im Projekt gespeichert)

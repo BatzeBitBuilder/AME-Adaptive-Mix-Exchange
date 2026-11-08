@@ -31,7 +31,7 @@ public:
     void updateTexts();   // nach Sprachwechsel
 
     // Rack-Reiter (für Tests / Screenshots)
-    enum class Module { Gate = 0, Compressor, DeEsser, NumModules };
+    enum class Module { Gate = 0, Compressor, DeEsser, Saturation, NumModules };
     void showModule (Module);
     Module getVisibleModule() const noexcept { return currentModule; }
 
@@ -102,6 +102,8 @@ private:
     Section input, filter, eq, output, adaptive;
     Toggle *phaseLToggle = nullptr, *phaseRToggle = nullptr;
     Toggle *hpfToggle = nullptr, *lpfToggle = nullptr;
+    Choice *hpfSlope = nullptr, *lpfSlope = nullptr, *lowType = nullptr, *highType = nullptr, *order = nullptr;
+    juce::Label orderLabel, lowTypeLabel, highTypeLabel;
     Knob* reactionKnob = nullptr;
 
     // Presets
@@ -115,8 +117,9 @@ private:
     std::vector<std::unique_ptr<RackModule>> modules;
     Module currentModule = Module::Compressor;
     juce::Rectangle<int> rackBounds, rackMeter, outputSpare;
-    Toggle *gateOn = nullptr, *compOn = nullptr, *compAutoRel = nullptr, *deessOn = nullptr, *deessListen = nullptr;
-    Choice *gateMode = nullptr, *deessMode = nullptr;
+    Toggle *gateOn = nullptr, *compOn = nullptr, *compAutoRel = nullptr, *deessOn = nullptr, *deessListen = nullptr,
+           *satOn = nullptr;
+    Choice *gateMode = nullptr, *deessMode = nullptr, *satType = nullptr;
 
     // Adaptiv
     Toggle *aEqToggle = nullptr, *aHpfToggle = nullptr, *aGainToggle = nullptr,
