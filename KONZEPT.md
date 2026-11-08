@@ -71,9 +71,9 @@ Input → Phase → HPF/LPF → Gate/Expander → EQ ⇄ Kompressor → De-Esser
 7. ✅ Vollständiger Channelstrip: Phase, Gate, De-Esser, Comp-Erweiterung, skalierbares Fenster (v0.10.0), Werkspresets je Rolle (v0.11.0), Sättigung/Exciter, EQ-Typen, Flanken, Reihenfolge (v0.12.0), Limiter/Clipper, eigene Presets, A/B (v0.13.0)
 
 ## Offene Punkte
-- v0.9.0 in Ableton getestet ✅; v0.13.0 unter Windows bauen und testen (neue Module, Presets, A/B, Skalierung)
+- v0.13.0 unter Windows gebaut und in Ableton erfolgreich getestet ✅
 - Werkspresets mit echtem Material feinjustieren; ggf. Oversampling für Sättigung/Clipper
 - Nächster Schritt: weitere Entwicklung; später Repo öffentlich + Release
 - Profilwerte weiter mit echtem Material feinjustieren
 - Rollenerkennung mit echtem Material prüfen (Prototypen in RoleClassifier.cpp justieren); optional ML-Klassifikator
-- Später: LUFS-Anzeige, Stereo-Korrelation/Goniometer, skalierbares Fenster
+- Später: LUFS-Anzeige, Stereo-Korrelation/Goniometer, Performance
