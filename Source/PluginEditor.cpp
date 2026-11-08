@@ -319,7 +319,7 @@ void MainView::resized()
     area.reduce (8, 6);
 
     auto line1 = header.removeFromTop (30);
-    logoArea = line1.removeFromLeft (270);
+    logoArea = line1.removeFromLeft (296);
 
     // rechts außen: Handbuch + Sprache
     {

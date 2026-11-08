@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.0 – 2026-11-08 (Werkspresets je Rolle)
+- **Werkspresets je Rolle** (16): Startwerte für Filter, EQ, Gate, Kompressor und De-Esser, z. B. Kick (Gate + Punch-EQ), Lead Vocal (3,5:1, Auto-Release, De-Esser), Bass (4:1); Input, Phase und Output bleiben unverändert
+- **Preset-Leiste** über dem Modul-Rack: Auswahl der Werkspresets, Anzeige des geladenen Presets (im Projekt gespeichert)
+- **„Preset der Rolle“**: lädt das Werkspreset der eingestellten oder per Auto-Kennung erkannten Rolle mit einem Klick
+- Presets setzen Parameter mit Gesten → in der DAW rückgängig zu machen / als Automation aufnehmbar
+- Logo-Bereich breiter (Versionsnummer)
+- Smoke-Test: alle Preset-Werte im gültigen Bereich, Laden über die erkannte Rolle
+
 ## 0.10.0 – 2026-11-08 (Phase, Gate/Expander, De-Esser, Kompressor-Erweiterung, skalierbares Fenster)
 - **Phasenumkehr** Ø L / Ø R in der INPUT-Sektion
 - **Gate / Expander** (neu): Modi Gate (3 dB Hysterese), Expander 1:2, 1:4; Threshold, Range, Attack, Hold, Release, Sidechain-Hochpass

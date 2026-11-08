@@ -5,6 +5,7 @@
 #include "LookAndFeel.h"
 #include "Parameters.h"
 #include "i18n/Lang.h"
+#include "engine/StripPresets.h"
 
 namespace mtm::ui
 {
@@ -13,6 +14,8 @@ using i18n::tr;
 namespace
 {
 const juce::Identifier rackTabId ("rackTab");
+const juce::Identifier presetNameId ("presetName");
+constexpr int kFactoryIdBase = 1;
 }
 
 StripPanel::StripPanel (juce::AudioProcessorValueTreeState& state, MixHub& h, int s)
@@ -101,6 +104,16 @@ StripPanel::StripPanel (juce::AudioProcessorValueTreeState& state, MixHub& h, in
     addAndMakeVisible (priorityBox);
     priorityAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (apvts, pid::priority, priorityBox);
 
+    // Presets
+    presetLabel.setFont (fonts::label (17.0f));
+    presetLabel.setColour (juce::Label::textColourId, colours::ink);
+    presetLabel.setText ("PRESET", juce::dontSendNotification);
+    addAndMakeVisible (presetLabel);
+    presetBox.onChange = [this] { presetChosen(); };
+    addAndMakeVisible (presetBox);
+    fromRoleButton.onClick = [this] { loadPresetForCurrentRole(); };
+    addAndMakeVisible (fromRoleButton);
+
     const int savedTab = (int) apvts.state.getProperty (rackTabId, (int) Module::Compressor);
     showModule ((Module) juce::jlimit (0, (int) modules.size() - 1, savedTab));
     updateTexts();
@@ -133,6 +146,9 @@ void StripPanel::updateTexts()
     priorityBox.clear (juce::dontSendNotification);
     priorityBox.addItemList (getPriorityNames(), 1);
     priorityBox.setSelectedItemIndex (sel, juce::dontSendNotification);
+
+    fillPresetBox();
+    updateRoleButton();
 
     levelVu.setCaption (tr ("Ausgang", "Output"));
     grVu.setCaption (tr ("Kompressor", "Compressor"));
@@ -196,6 +212,54 @@ StripPanel::RackModule& StripPanel::addModule (const char* onParam, std::functio
     m->reduction = std::move (reduction);
     modules.push_back (std::move (m));
     return *modules.back();
+}
+
+void StripPanel::fillPresetBox()
+{
+    presetBox.clear (juce::dontSendNotification);
+    presetBox.addSectionHeading (tr ("Werkspresets je Rolle", "Factory presets by role"));
+    const auto& factory = presets::getFactoryPresets();
+    for (int i = 0; i < (int) factory.size(); ++i)
+        presetBox.addItem (getRoleNames()[(int) factory[(size_t) i].role], kFactoryIdBase + i);
+
+    presetBox.setTextWhenNothingSelected (apvts.state.getProperty (presetNameId, tr ("– kein Preset –", "– no preset –")).toString());
+    presetBox.setTooltip (tr ("Werkspreset laden: setzt Filter, EQ, Gate, Kompressor und De-Esser. Input, Phase und Output bleiben.",
+                              "Load a factory preset: sets filter, EQ, gate, compressor and de-esser. Input, phase and output stay."));
+}
+
+void StripPanel::presetChosen()
+{
+    const int id = presetBox.getSelectedId();
+    const auto& factory = presets::getFactoryPresets();
+    const int fi = id - kFactoryIdBase;
+    if (juce::isPositiveAndBelow (fi, (int) factory.size()))
+    {
+        presets::applyFactory (apvts, factory[(size_t) fi]);
+        apvts.state.setProperty (presetNameId, tr ("Werk: ", "Factory: ") + presetBox.getText(), nullptr);
+    }
+    // Anzeige: Name des geladenen Presets, Auswahl zurücksetzen (erneut wählbar)
+    presetBox.setSelectedId (0, juce::dontSendNotification);
+    presetBox.setTextWhenNothingSelected (apvts.state.getProperty (presetNameId).toString());
+}
+
+void StripPanel::loadPresetForCurrentRole()
+{
+    if (const auto* fp = presets::findFactoryPreset (currentRole))
+    {
+        presets::applyFactory (apvts, *fp);
+        apvts.state.setProperty (presetNameId, tr ("Werk: ", "Factory: ") + getRoleNames()[(int) currentRole], nullptr);
+        presetBox.setTextWhenNothingSelected (apvts.state.getProperty (presetNameId).toString());
+    }
+}
+
+void StripPanel::updateRoleButton()
+{
+    const bool ok = presets::findFactoryPreset (currentRole) != nullptr;
+    fromRoleButton.setEnabled (ok);
+    fromRoleButton.setButtonText (ok ? tr ("Preset der Rolle: ", "Role preset: ") + getRoleNames()[(int) currentRole]
+                                     : tr ("Preset der Rolle (Rolle unbekannt)", "Role preset (role unknown)"));
+    fromRoleButton.setTooltip (tr ("Lädt das Werkspreset der eingestellten bzw. automatisch erkannten Rolle.",
+                                   "Loads the factory preset of the selected or automatically detected role."));
 }
 
 void StripPanel::showModule (Module m)
@@ -299,6 +363,18 @@ void StripPanel::resized()
         outputSpare = inner;
     }
 
+    // Oben: Preset-Leiste
+    presetBar = area.removeFromTop (34);
+    {
+        auto r = presetBar.reduced (8, 4);
+        presetLabel.setBounds (r.removeFromLeft (64));
+        presetBox.setBounds (r.removeFromLeft (250));
+        r.removeFromLeft (10);
+        fromRoleButton.setBounds (r.removeFromLeft (290));
+        presetTools = r.withTrimmedLeft (10);
+    }
+    area.removeFromTop (gap);
+
     // Unten: Adaptiv
     auto row3 = area.removeFromBottom (150);
     area.removeFromBottom (gap);
@@ -373,6 +449,7 @@ void StripPanel::paint (juce::Graphics& g)
 {
     for (auto* s : { &input, &filter, &eq, &output, &adaptive })
         drawEngravedPanel (g, s->bounds.toFloat(), s->title);
+    drawEngravedPanel (g, presetBar.toFloat(), {});
 
     paintRack (g);
     paintAdaptive (g);
@@ -556,6 +633,11 @@ void StripPanel::refreshMeters()
                     plateName = t.name;
                     plateRole = getRoleNames()[(int) t.role] + (t.autoRole ? tr (" (Kennung)", " (auto)") : juce::String());
                     plateLine = "LINE " + juce::String (t.instanceId).paddedLeft ('0', 2);
+                    if (t.role != currentRole)
+                    {
+                        currentRole = t.role;
+                        updateRoleButton();
+                    }
                 }
             plateGenre = hub.isEngineAlive() ? getGenreNames()[hub.globalGenre.load()] : MTM_TXT ("– no exchange –");
             repaint (plateArea);

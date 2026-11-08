@@ -35,6 +35,10 @@ public:
     void showModule (Module);
     Module getVisibleModule() const noexcept { return currentModule; }
 
+    // Presets (für Tests): Werkspreset der aktuellen Rolle laden
+    void loadPresetForCurrentRole();
+    Role getCurrentRole() const noexcept { return currentRole; }
+
 private:
     struct Knob
     {
@@ -83,6 +87,9 @@ private:
     void paintRack (juce::Graphics&);
     void paintAdaptive (juce::Graphics&);
     void paintPlate (juce::Graphics&);
+    void fillPresetBox();
+    void presetChosen();
+    void updateRoleButton();
 
     juce::AudioProcessorValueTreeState& apvts;
     MixHub& hub;
@@ -96,6 +103,13 @@ private:
     Toggle *phaseLToggle = nullptr, *phaseRToggle = nullptr;
     Toggle *hpfToggle = nullptr, *lpfToggle = nullptr;
     Knob* reactionKnob = nullptr;
+
+    // Presets
+    juce::Rectangle<int> presetBar, presetTools;
+    juce::Label presetLabel;
+    juce::ComboBox presetBox;
+    juce::TextButton fromRoleButton;
+    Role currentRole = Role::Auto;
 
     // Rack
     std::vector<std::unique_ptr<RackModule>> modules;

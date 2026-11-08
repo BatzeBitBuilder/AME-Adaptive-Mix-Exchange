@@ -274,6 +274,15 @@ void VintageLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label&
     label.setFont (getComboBoxFont (box));
 }
 
+void VintageLookAndFeel::drawComboBoxTextWhenNothingSelected (juce::Graphics& g, juce::ComboBox& box, juce::Label& label)
+{
+    // z. B. Name des geladenen Presets: normal lesbar, nicht ausgegraut
+    g.setColour (box.findColour (juce::ComboBox::textColourId));
+    g.setFont (getComboBoxFont (box));
+    g.drawFittedText (box.getTextWhenNothingSelected(), label.getBounds(), juce::Justification::centredLeft,
+                      1, 0.8f);
+}
+
 juce::Font VintageLookAndFeel::getPopupMenuFont() { return juce::Font (fonts::mono (15.0f)); }
 juce::Font VintageLookAndFeel::getTextButtonFont (juce::TextButton&, int) { return juce::Font (fonts::label (17.0f)); }
 juce::Font VintageLookAndFeel::getLabelFont (juce::Label& l) { return l.getFont(); }

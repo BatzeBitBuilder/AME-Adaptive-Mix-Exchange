@@ -10,6 +10,7 @@
 #include "engine/RoleClassifier.h"
 #include "RoleSignals.h"
 #include "Settings.h"
+#include "engine/StripPresets.h"
 
 using namespace mtm;
 
@@ -676,6 +677,41 @@ int main (int argc, char** argv)
         snapshot (*edT, outDir.getChildFile ("ui_track_en.png"));
         snapshot (*edM, outDir.getChildFile ("ui_master_en.png"));
         mtm::i18n::setLanguageForTesting (mtm::i18n::Language::German);
+    }
+
+    // Werkspresets: alle IDs gültig, Werte im Bereich; Laden über die Rolle
+    {
+        std::cout << "Presets:\n";
+        for (const auto& fp : presets::getFactoryPresets())
+            for (const auto& v : fp.values)
+            {
+                auto* prm = dynamic_cast<juce::RangedAudioParameter*> (bass->apvts.getParameter (v.id));
+                CHECK (prm != nullptr && presets::getSoundScope().contains (v.id));
+                if (prm != nullptr)
+                {
+                    const auto& r = prm->getNormalisableRange();
+                    if (v.value < r.start || v.value > r.end)
+                        std::cerr << "  Wert außerhalb: " << v.id << " " << v.value << "\n";
+                    CHECK (v.value >= r.start && v.value <= r.end);
+                }
+            }
+
+        setParam (*bass, pid::deessOn, 1.0f);
+        setParam (*bass, pid::pan, -0.5f);
+        std::unique_ptr<juce::AudioProcessorEditor> ed (bass->createEditor());
+        auto* med = dynamic_cast<MultiTrackMixEditor*> (ed.get());
+        for (int f = 0; f < 20; ++f) { runAll (1); juce::MessageManager::getInstance()->runDispatchLoopUntil (33); }
+        CHECK (med->getStrip().getCurrentRole() == Role::Bass);
+        med->getStrip().loadPresetForCurrentRole();
+        auto val = [&] (const char* id) { return bass->apvts.getRawParameterValue (id)->load(); };
+        CHECK (val (pid::compOn) > 0.5f && std::abs (val (pid::compRatio) - 4.0f) < 0.01f);
+        CHECK (val (pid::hpfOn) > 0.5f && std::abs (val (pid::hpfFreq) - 30.0f) < 0.5f);
+        CHECK (val (pid::deessOn) < 0.5f);                 // nicht im Preset → Standard
+        CHECK (std::abs (val (pid::pan) + 0.5f) < 0.01f);  // außerhalb des Klang-Umfangs → bleibt
+        std::cout << "  " << presets::getFactoryPresets().size() << " Werkspresets, Bass geladen\n";
+        med->getStrip().showModule (ui::StripPanel::Module::Compressor);
+        for (int f = 0; f < 20; ++f) { runAll (1); juce::MessageManager::getInstance()->runDispatchLoopUntil (33); }
+        snapshot (*ed, outDir.getChildFile ("ui_track_preset.png"));
     }
 
     vocal.reset();
