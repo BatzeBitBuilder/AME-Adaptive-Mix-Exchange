@@ -1,6 +1,6 @@
 # AME (Adaptive Mix Exchange) – Konzept
 
-Stand: 2026-11-08 · Version 0.8.1 (Roadmap Schritte 1–4 + Vintage-UI + Umbenennung AME + DE/EN + Handbuch + AGPLv3)
+Stand: 2026-11-08 · Version 0.9.0 (Roadmap Schritte 1–4 + Vintage-UI + Umbenennung AME + DE/EN + Handbuch + AGPLv3 + Shared-Memory-Hub)
 Entwickler: Batze the bit builder
 
 ## Ziel
@@ -14,8 +14,8 @@ VST3-Channelstrip, dessen Instanzen sich gegenseitig kennen. Anhand eines global
 | Lizenz | Open Source, GNU AGPLv3 (AGPL-3.0-only); JUCE unter dessen AGPLv3-Option, VST3 SDK MIT, Schriften OFL (THIRD_PARTY_NOTICES.md) |
 | Repository | GitHub BatzeBitBuilder/AME-Adaptive-Mix-Exchange (derzeit privat) |
 | Framework | JUCE (C++), CMake, Format VST3 |
-| Plattform / DAW | Windows, Ableton Live |
-| Kommunikation | C: In-Process-Singleton (primär) + Shared-Memory/IPC-Fallback |
+| Plattform / DAW | Windows, jede VST3-DAW (getestet: Ableton Live) |
+| Kommunikation | Hub im Named Shared Memory der DAW-Sitzung (prozessübergreifend), Fallback In-Process |
 | Modus | Adaptive (kontinuierliche, dynamische Anpassung) |
 | Rollen | manuell wählbar oder „Auto“: Spurname → Klangmerkmale (regelbasiert); ML später optional |
 | Presets | Rock / Band, Pop (Vocal-Fokus), Electronic, Hip-Hop, Akustik / Singer-Songwriter, Metal |
@@ -32,9 +32,9 @@ VST3-Channelstrip, dessen Instanzen sich gegenseitig kennen. Anhand eines global
 
 ## Architektur
 ### 1. Kommunikation (SharedHub)
-- `MixHub`-Singleton in der Plugin-DLL: Registry aller Instanzen (ID, Name, Rolle, Analyse-Daten).
-- Datenaustausch lock-free (Atomics / SPSC-Ringbuffer), kein Locking im Audio-Thread.
-- Fallback: Named Shared Memory (`CreateFileMapping`) mit Slot-Tabelle, falls Instanzen in getrennten Prozessen laufen.
+- `MixHub` pro Prozess (SharedResourcePointer), Daten (Registry + Analyse) im Named Shared Memory `AME_Hub_v<Layout>_<Größe>_<Sitzung>` (Windows `CreateFileMapping` + benannter Mutex; POSIX `shm_open` + robuster Mutex).
+- Sitzung = DAW-PID (Hilfsprozesse wie Plugin-Host/Audio-Engine/Bridge werden zurückverfolgt), Override `AME_HUB_SESSION`; Slots toter Prozesse werden aufgeräumt; Fallback lokal.
+- Datenaustausch lock-free (Atomics), kein Locking im Audio-Thread; Sperre nur für die Registry (Message-Thread).
 - Daten anderer Spuren sind ≥1 Block alt (DAW verarbeitet Spuren parallel) → Regelung mit Glättung (Attack/Release), kein samplegenaues Ducking.
 
 ### 2. Analyse (pro Instanz)
@@ -64,11 +64,11 @@ Input-Gain → HPF/LPF → EQ (4–6 Bänder, statisch + dynamisch) → Kompress
    ✅ Vintage-UI (v0.6.0), Umbenennung AME (v0.7.0)
    ✅ Englische Oberfläche (umschaltbar) + Handbuch DE/EN (v0.8.0)
 5. Veröffentlichung auf GitHub: ✅ privates Repo (v0.8.0), ✅ Lizenz AGPLv3 (v0.8.1); offen: Repo öffentlich, Release-Build, ggf. GitHub Actions/Pages
-6. Shared-Memory-Fallback, Feinschliff, Performance
+6. ✅ Shared-Memory-Hub prozessübergreifend (v0.9.0); offen: Feinschliff, Performance
 
 ## Offene Punkte
-- v0.8.0 in Ableton testen (DE/EN-Umschaltung mit mehreren Instanzen, Handbuch)
+- v0.9.0 in Ableton testen (DE/EN, Handbuch, Tooltip Verbindung); optional Bitwig/Reaper mit Plug-in-Sandbox
 - Nächster Schritt: weitere Entwicklung; später Repo öffentlich + Release
 - Profilwerte weiter mit echtem Material feinjustieren
 - Rollenerkennung mit echtem Material prüfen (Prototypen in RoleClassifier.cpp justieren); optional ML-Klassifikator
-- Später: Shared-Memory-Fallback, LUFS-Anzeige, Stereo-Korrelation/Goniometer, skalierbares Fenster
+- Später: LUFS-Anzeige, Stereo-Korrelation/Goniometer, skalierbares Fenster
