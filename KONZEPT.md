@@ -55,7 +55,7 @@ Input → Phase → HPF/LPF → Gate/Expander → EQ ⇄ Kompressor → De-Esser
 
 ### 5. UI
 - Line: Input/Filter/Kompressor/Output, EQ mit Analyzer + Spektrogramm, Adaptiv-Sektion, VU Ausgang + GR, Typenschild.
-- Exchange/Mix-Übersicht: Line-Liste, Analyzer aller Spuren + Summe, Spektrogramm, VU L/R, Patchfeld; Programm, Amount, Direkt, Hold.
+- Exchange/Mix-Übersicht: Line-Liste, Analyzer aller Spuren + Summe, Spektrogramm, VU L/R, Patchfeld; Programm, Amount, Abhöre (Voll/Ohne Amt/Roh), Pegelangleich, Hold.
 - Kopf: Sprache DE/EN, HANDBUCH (Overlay mit Inhaltsverzeichnis).
 
 ## Roadmap
@@ -68,8 +68,8 @@ Input → Phase → HPF/LPF → Gate/Expander → EQ ⇄ Kompressor → De-Esser
    ✅ Englische Oberfläche (umschaltbar) + Handbuch DE/EN (v0.8.0)
 5. Veröffentlichung auf GitHub: ✅ privates Repo (v0.8.0), ✅ Lizenz AGPLv3 (v0.8.1); offen: Repo öffentlich, Release-Build, ggf. GitHub Actions/Pages
 6. ✅ Shared-Memory-Hub prozessübergreifend (v0.9.0); offen: Feinschliff, Performance
-8. ✅ Abhöre Voll/Ohne Amt/Roh + Pegelangleich, Exchange-Deaktivierung stoppt Engine (v0.14.0)
 7. ✅ Vollständiger Channelstrip: Phase, Gate, De-Esser, Comp-Erweiterung, skalierbares Fenster (v0.10.0), Werkspresets je Rolle (v0.11.0), Sättigung/Exciter, EQ-Typen, Flanken, Reihenfolge (v0.12.0), Limiter/Clipper, eigene Presets, A/B (v0.13.0)
+8. ✅ Abhöre Voll/Ohne Amt/Roh + Pegelangleich, Exchange-Deaktivierung stoppt Engine (v0.14.0)
 
 ## Offene Punkte
 - v0.13.0 unter Windows gebaut und in Ableton erfolgreich getestet ✅
