@@ -13,6 +13,7 @@
 #include "dsp/SpectrumAnalyzer.h"
 #include "engine/MixEngine.h"
 #include "engine/RoleClassifier.h"
+#include "engine/Recording.h"
 
 class AmeProcessor : public juce::AudioProcessor,
                                private juce::Timer
@@ -54,12 +55,18 @@ public:
     uint32_t getInstanceId() const noexcept { return instanceId; }
     ame::InstanceMode getMode() const noexcept;
     bool isActiveMaster() const;
-    bool isEngineRunning() const { return engine != nullptr && engine->isActive(); }
+    // Engine rechnet (aktives Exchange, vom Host verarbeitet); getaktet vom Audio des Exchange
+    bool isEngineRunning() const noexcept { return activeMasterFlag.load() && ! exchangeSuspended.load(); }
+    uint64_t getEngineSteps() const noexcept { return engine->getStepCount(); }
     // Exchange ist Master, wird vom Host aber nicht verarbeitet (deaktiviert / Bypass)
     bool isExchangeSuspended() const noexcept { return exchangeSuspended.load(); }
     void setMonitor (int mode);   // Abhöre 0/1/2 (Message-Thread, mit Geste)
     juce::String getTrackName() const;
     ame::RoleGuess getAutoRole() const { return autoGuess; }   // nur Message-Thread
+
+    // Mitschnitt (Lernlauf)
+    ame::AdaptiveRecording& getRecording() noexcept { return recording; }
+    void setLearnMode (int mode);   // 0 = Live, 1 = Aufnahme, 2 = Wiedergabe (Message-Thread, mit Geste)
 
 private:
     void timerCallback() override;
@@ -88,6 +95,33 @@ private:
 
     ame::RoleDetector roleDetector;
     ame::RoleGuess autoGuess;   // Message-Thread
+
+    // Mitschnitt
+    ame::AdaptiveRecording recording;
+    uint32_t lastLearnCommandGen = 0;
+    bool lastReplay = false;
+
+    // Export erkennen, auch ohne Offline-Kennung des Hosts: Audio läuft deutlich schneller als Echtzeit
+    struct RenderSpeed
+    {
+        bool update (int numSamples, double sampleRate) noexcept
+        {
+            const double now = juce::Time::getMillisecondCounterHiRes();
+            if (lastMs <= 0.0 || now - lastMs > 250.0) { winStart = now; winAudioSec = 0.0; }
+            lastMs = now;
+            winAudioSec += (double) numSamples / sampleRate;
+            if (winAudioSec >= 0.5)
+            {
+                fast = winAudioSec * 1000.0 > (now - winStart) * 1.5;
+                winStart = now;
+                winAudioSec = 0.0;
+            }
+            return fast;
+        }
+        double lastMs = 0.0, winStart = 0.0, winAudioSec = 0.0;
+        bool fast = false;
+    } renderSpeed;
+    bool engineEnabled = false;   // Message-Thread
 
     void storeFrozenState();
     void loadFrozenState();

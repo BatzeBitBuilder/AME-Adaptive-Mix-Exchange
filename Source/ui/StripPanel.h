@@ -127,6 +127,11 @@ private:
     // Adaptiv
     Toggle *aEqToggle = nullptr, *aHpfToggle = nullptr, *aGainToggle = nullptr,
            *aBypassToggle = nullptr, *aFreezeToggle = nullptr;
+    Choice* learnChoice = nullptr;   // Mitschnitt: Live / Aufnahme / Wiedergabe
+    juce::Label learnLabel;
+    int learnMode = 0;
+    float learnSec = 0.0f;
+    bool learnActive = false, renderWarn = false;
     EqGraph eqGraph;
     juce::Label priorityLabel;
     juce::ComboBox priorityBox;

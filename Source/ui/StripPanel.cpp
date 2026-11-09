@@ -129,6 +129,11 @@ StripPanel::StripPanel (juce::AudioProcessorValueTreeState& state, MixHub& h, in
     aGainToggle = addToggle (pid::adaptGain, "Gain");
     aBypassToggle = addToggle (pid::adaptBypass, {});
     aFreezeToggle = addToggle (pid::adaptFreeze, "Hold");
+    learnChoice = addChoice (pid::learnMode, { "Live", "Record", "Playback" });
+    learnLabel.setFont (fonts::label (15.0f));
+    learnLabel.setColour (juce::Label::textColourId, colours::textDim);
+    learnLabel.setJustificationType (juce::Justification::centredRight);
+    addAndMakeVisible (learnLabel);
 
     priorityLabel.setFont (fonts::label (15.0f));
     priorityLabel.setColour (juce::Label::textColourId, colours::textDim);
@@ -179,6 +184,12 @@ void StripPanel::updateTexts()
     refill (lowType->box, { "Shelf", tr ("Glocke", "Bell") });
     refill (highType->box, { "Shelf", tr ("Glocke", "Bell") });
     refill (order->box, { "EQ > Comp", "Comp > EQ" });
+    refill (learnChoice->box, { "Live", tr ("Aufnahme", "Record"), tr ("Wiedergabe", "Playback") });
+    learnLabel.setText (tr ("Mitschnitt", "Recording"), juce::dontSendNotification);
+    learnChoice->box.setTooltip (tr ("Mitschnitt: Live = Engine regelt laufend. Aufnahme = angewendete Werte über die Songposition aufzeichnen "
+                                     "(Transport läuft). Wiedergabe = Aufzeichnung exakt abspielen – Export klingt wie die Abhöre, auch ohne Exchange.",
+                                     "Recording: Live = engine adapts continuously. Record = capture the applied values along the song position "
+                                     "(transport running). Playback = replay the capture exactly – exports sound like the monitor, even without an exchange."));
     orderLabel.setText (tr ("Reihenfolge", "Order"), juce::dontSendNotification);
     lowTypeLabel.setText ("Low", juce::dontSendNotification);
     highTypeLabel.setText ("High", juce::dontSendNotification);
@@ -603,6 +614,10 @@ void StripPanel::resized()
     title.removeFromLeft (16);
     aBypassToggle->button.setBounds (title.removeFromLeft (104));
     aFreezeToggle->button.setBounds (title.removeFromLeft (104));
+    title.removeFromLeft (8);
+    learnLabel.setBounds (title.removeFromLeft (86));
+    title.removeFromLeft (6);
+    learnChoice->box.setBounds (title.removeFromLeft (128));
 
     auto knobArea = inner.removeFromLeft (160);
     layoutKnobRow (adaptive.knobs, knobArea);
@@ -706,6 +721,12 @@ void StripPanel::paintPlate (juce::Graphics& g)
     }
 }
 
+static juce::String mmss (float sec)
+{
+    const int s = juce::roundToInt (sec);
+    return juce::String (s / 60) + ":" + juce::String (s % 60).paddedLeft ('0', 2);
+}
+
 void StripPanel::paintAdaptive (juce::Graphics& g)
 {
     auto area = adaptiveDisplay.toFloat();
@@ -722,7 +743,16 @@ void StripPanel::paintAdaptive (juce::Graphics& g)
     if (rawMonitor)        { st = tr ("ROH – AME UMGANGEN (ABHÖRE IM EXCHANGE)", "RAW – AME BYPASSED (EXCHANGE MONITOR)"); sc = colours::warn.brighter (0.4f); }
     else if (noEngineMonitor) { st = tr ("OHNE AMT – ENGINE AUS (ABHÖRE)", "NO ENGINE – ENGINE OFF (MONITOR)"); sc = colours::amberLamp; }
     else if (bypassed)     { st = tr ("DIREKT – EINGRIFFE AUS", "DIRECT – PROCESSING OFF"); sc = colours::amberLamp; }
+    else if (learnMode == 2 && learnSec > 0.0f)
+                           { st = tr ("WIEDERGABE MITSCHNITT ", "PLAYBACK RECORDING ") + mmss (learnSec); sc = juce::Colour (0xff8fd0ff); }
+    else if (learnMode == 2) { st = tr ("WIEDERGABE – KEIN MITSCHNITT", "PLAYBACK – NOTHING RECORDED"); sc = colours::amberLamp; }
+    else if (learnMode == 1 && ! engineAlive && ! frozen)
+                           { st = tr ("AUFNAHME – KEIN EXCHANGE AKTIV", "RECORD – NO ACTIVE EXCHANGE"); sc = colours::warn.brighter (0.4f); }
+    else if (learnMode == 1 && learnActive)
+                           { st = tr ("AUFNAHME LÄUFT ", "RECORDING ") + mmss (learnSec); sc = colours::warn.brighter (0.4f); }
+    else if (learnMode == 1) { st = tr ("AUFNAHME BEREIT – TRANSPORT STARTEN ", "RECORD ARMED – START TRANSPORT ") + mmss (learnSec); sc = colours::amberLamp; }
     else if (frozen)       { st = tr ("HOLD – WERTE GEHALTEN", "HOLD – VALUES FROZEN");     sc = juce::Colour (0xff8fd0ff); }
+    else if (renderWarn)   { st = tr ("EXPORT OHNE EXCHANGE – ADAPTIV FEHLTE", "EXPORT WITHOUT EXCHANGE – NO ADAPTIVE"); sc = colours::warn.brighter (0.4f); }
     else if (engineAlive)  { st = tr ("EXCHANGE VERBUNDEN", "EXCHANGE CONNECTED"); }
     else if (exchangePresent) { st = tr ("EXCHANGE DEAKTIVIERT – ENGINE AUS", "EXCHANGE DEACTIVATED – ENGINE OFF"); sc = colours::amberLamp; }
     else                   { st = tr ("NO EXCHANGE – LINE LÄUFT SOLO", "NO EXCHANGE – LINE RUNS SOLO"); sc = colours::amberLamp; }
@@ -788,6 +818,11 @@ void StripPanel::refreshMeters()
         noEngineMonitor = engineAlive && hub.monitorMode.load() == 1;
         frozen = d->frozen.load();
         bypassed = d->bypassed.load();
+        learnMode = d->learnMode.load();
+        learnSec = d->learnSec.load();
+        learnActive = d->learnActive.load();
+        const auto rw = d->renderWarnMs.load();
+        renderWarn = rw != 0 && juce::Time::getMillisecondCounter() - rw < 5u * 60u * 1000u;
         eqGraph.refresh (dt);
 
         // Rack: Reduktion (Anzeige mit schnellem Anstieg, langsamem Abfall) und Lampen der Reiter

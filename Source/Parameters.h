@@ -20,6 +20,7 @@ inline constexpr const char* adaptHpf  = "adaptHpf";
 inline constexpr const char* adaptGain = "adaptGain";
 inline constexpr const char* adaptBypass = "adaptBypass";   // A/B: adaptive Eingriffe aus
 inline constexpr const char* adaptFreeze = "adaptFreeze";   // aktuelle Werte festhalten
+inline constexpr const char* learnMode   = "learnMode";     // Mitschnitt: 0 = Live, 1 = Aufnahme, 2 = Wiedergabe
 
 // Master (global)
 inline constexpr const char* genre        = "genre";

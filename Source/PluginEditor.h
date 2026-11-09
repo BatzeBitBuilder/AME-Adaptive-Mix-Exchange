@@ -59,6 +59,9 @@ private:
     juce::ToggleButton levelMatch;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> levelMatchAtt;
     juce::TextButton freezeAllButton, releaseAllButton;
+    juce::Label learnBarLabel, learnStatus;                 // Exchange: Mitschnitt aller Lines
+    juce::TextButton learnRecAll, learnPlayAll, learnLiveAll, learnClearAll;
+    juce::Rectangle<int> learnBar;
     juce::TextButton langDe { "DE" }, langEn { "EN" }, manualButton;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> globalBypassAtt;
 

@@ -415,7 +415,8 @@ static void testCrossProcessHub (MixHub& hub, const std::function<void()>& tick)
 
     bool seen = false, analysed = false;
     int procs = 0;
-    for (int i = 0; i < 200 && ! (seen && analysed); ++i)
+    // weiter takten, bis das Kind fertig ist: die Engine rechnet im Audio-Takt des Exchange (hier: tick)
+    for (int i = 0; i < 400 && (! (seen && analysed) || child.isRunning()); ++i)
     {
         tick();
         for (const auto& t : hub.getSnapshot())
@@ -781,6 +782,152 @@ int main (int argc, char** argv)
         std::cout << "  Host-Bypass / keine Verarbeitung: Engine aus und wieder an\n";
     }
     CHECK (kick->getHub().getNumInstances() == 4);
+
+    // --- Export = Abhöre: Engine im Audio-Takt, Mitschnitt (1.0.2) ---
+    {
+        auto& hub = kick->getHub();
+
+        // Engine rechnet je 20 ms Audio (unabhängig von der Uhrzeit / Render-Geschwindigkeit)
+        const auto steps0 = master->getEngineSteps();
+        runAll (250);   // 250 × 512 @ 48 kHz = 2,667 s → 133 Schritte
+        const auto steps = (int64_t) (master->getEngineSteps() - steps0);
+        std::cout << "  Engine-Schritte fuer 2,667 s Audio: " << steps << "\n";
+        CHECK (std::abs (steps - 133) <= 1);
+
+        // Offline-Kennung des Hosts → großzügige Lebenszeichen
+        master->setNonRealtime (true);
+        runAll (2);
+        CHECK (hub.engineOffline.load());
+        master->setNonRealtime (false);
+        runAll (2);
+        CHECK (! hub.engineOffline.load());
+
+        // Songposition für die Lines
+        struct FakePlayHead : juce::AudioPlayHead
+        {
+            double sec = 0.0;
+            bool playing = true;
+            juce::Optional<PositionInfo> getPosition() const override
+            {
+                PositionInfo p;
+                p.setIsPlaying (playing);
+                p.setTimeInSeconds (sec);
+                p.setTimeInSamples ((int64_t) (sec * 48000.0));
+                return p;
+            }
+        } ph;
+        for (auto* p : { kick.get(), bass.get(), vocal.get() })
+            p->setPlayHead (&ph);
+
+        auto runSong = [&] (int rounds, bool withExchange, const std::function<void (int)>& each = {})
+        {
+            for (int r = 0; r < rounds; ++r)
+            {
+                runBlocks (*kick, kickSig, 1);
+                runBlocks (*bass, bassSig, 1);
+                runBlocks (*vocal, vocalSig, 1);
+                if (withExchange)
+                    runBlocks (*master, masterSig, 1);
+                if (each) each (r);
+                ph.sec += 512.0 / 48000.0;
+            }
+        };
+
+        // Aufnahme (alle) vom Exchange
+        hub.sendLearnCommand (MixHub::learnRecord);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
+        CHECK (juce::roundToInt (bass->apvts.getRawParameterValue (pid::learnMode)->load()) == 1);
+        CHECK (bass->getRecording().isAllocated());
+        CHECK (juce::roundToInt (master->apvts.getRawParameterValue (pid::learnMode)->load()) == 0);   // Exchange nimmt nicht teil
+
+        ph.sec = 0.0;
+        runSong (375, true);   // 4 s
+        std::cout << "  Mitschnitt Bass: " << bass->getRecording().getLengthSec() << " s\n";
+        CHECK (std::abs (bass->getRecording().getLengthSec() - 4.0f) < 0.05f);
+        CHECK (hub.getAudioData (bass->getSlot())->learnSec.load() > 3.9f);
+
+        AdaptiveRecording::Values at2;
+        CHECK (bass->getRecording().read (2.0, at2));
+        CHECK (at2.cutDb[1] < -1.0f);   // Bass weicht der Kick (wie oben)
+
+        // Wiedergabe ohne Exchange (wie Stem-Export): exakt die aufgezeichneten Werte an derselben Stelle
+        hub.sendLearnCommand (MixHub::learnPlay);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
+        CHECK (juce::roundToInt (bass->apvts.getRawParameterValue (pid::learnMode)->load()) == 2);
+
+        auto replayRun = [&] (std::vector<float>& out)
+        {
+            ph.sec = 0.0;
+            runSong (375, false, [&] (int r)
+            {
+                if (r >= 60)   // nach der Überblendung (0,3 s)
+                {
+                    auto* d = hub.getAudioData (bass->getSlot());
+                    out.push_back (d->appliedCutDb[1].load());
+                    out.push_back (d->appliedGainDb.load());
+                    AdaptiveRecording::Values v;
+                    bass->getRecording().read (ph.sec, v);
+                    CHECK (std::abs (v.cutDb[1] - d->appliedCutDb[1].load()) < 1.0e-4f);
+                }
+            });
+        };
+        hub.getAudioData (bass->getSlot())->renderWarnMs.store (0);   // Warnungen vom Testbeginn (Engine lief noch nicht)
+        juce::Thread::sleep (600);   // Engine-Lebenszeichen sicher abgelaufen
+        CHECK (! hub.isEngineAlive());
+        std::vector<float> runA, runB;
+        replayRun (runA);
+        bass->setNonRealtime (true);   // Export-Kennung ändert nichts
+        replayRun (runB);
+        bass->setNonRealtime (false);
+        CHECK (runA == runB);
+        CHECK (hub.getAudioData (bass->getSlot())->renderWarnMs.load() == 0);   // Wiedergabe: keine Warnung
+        std::cout << "  Wiedergabe ohne Exchange: " << runA.size() / 2 << " Bloecke identisch zum Mitschnitt\n";
+
+        {
+            std::unique_ptr<juce::AudioProcessorEditor> ed (bass->createEditor());
+            ph.sec = 2.0;
+            for (int f = 0; f < 10; ++f) { runSong (3, false); juce::MessageManager::getInstance()->runDispatchLoopUntil (33); }
+            snapshot (*ed, outDir.getChildFile ("ui_track_playback.png"));
+        }
+
+        // im Projekt gespeichert (komprimiert) und wieder geladen
+        {
+            juce::MemoryBlock state;
+            bass->getStateInformation (state);
+            std::cout << "  Projektzustand Bass mit Mitschnitt: " << state.getSize() << " Bytes\n";
+            AmeProcessor restored;
+            restored.setStateInformation (state.getData(), (int) state.getSize());
+            CHECK (std::abs (restored.getRecording().getLengthSec() - bass->getRecording().getLengthSec()) < 1.0e-6f);
+            AdaptiveRecording::Values r2;
+            CHECK (restored.getRecording().read (2.0, r2));
+            CHECK (r2.cutDb == at2.cutDb && r2.hpfHz == at2.hpfHz && r2.gainDb == at2.gainDb);
+            CHECK (juce::roundToInt (restored.apvts.getRawParameterValue (pid::learnMode)->load()) == 2);
+        }
+
+        // Export ohne Exchange und ohne Mitschnitt → Warnung an der Line
+        hub.sendLearnCommand (MixHub::learnLive);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
+        CHECK (juce::roundToInt (kick->apvts.getRawParameterValue (pid::learnMode)->load()) == 0);
+        juce::Thread::sleep (600);
+        runBlocks (*kick, kickSig, 200);   // schneller als Echtzeit
+        CHECK (hub.getAudioData (kick->getSlot())->renderWarnMs.load() != 0);
+
+        // Löschen
+        hub.sendLearnCommand (MixHub::learnClear);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
+        CHECK (! bass->getRecording().hasData());
+
+        for (auto* p : { kick.get(), bass.get(), vocal.get() })
+        {
+            p->setPlayHead (nullptr);
+            hub.getAudioData (p->getSlot())->renderWarnMs.store (0);
+        }
+        // Engine wieder anlaufen lassen
+        for (int i = 0; i < 10; ++i) { runAll (2); juce::MessageManager::getInstance()->runDispatchLoopUntil (20); }
+        CHECK (hub.isEngineAlive());
+        for (auto* p : { kick.get(), bass.get(), vocal.get() })
+            hub.getAudioData (p->getSlot())->renderWarnMs.store (0);
+    }
 
     // UI-Snapshots
     {

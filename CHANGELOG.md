@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.2 – 2026-11-09 (export = monitor: audio-clocked engine, recording)
+- **Engine on the audio clock**: the Exchange computes one engine step per 20 ms of audio in its audio thread (previously a 50 Hz wall-clock timer). Offline exports – faster or slower than real time – now behave like playback. The engine step is real-time safe (no locks, no allocations; registry copy per slot in the hub)
+- **Recording** (new, per Line: Live / Record / Playback, parameter “Recording”, not automatable): captures the applied adaptive values (10 cuts, high-pass, level) along the DAW song position at 50 frames/s and replays them exactly – independent of engine, Exchange and render speed, also for single-track (stem) exports. Saved compressed with the project (up to 30 min); gaps up to 10 s are bridged
+- Exchange: recording bar with **Record (all)**, **Playback (all)**, **Live (all)**, **Clear** and a status summary
+- **Export warning**: a Line exported without a running engine and without a recording (detected via the host's offline flag or audio running faster than real time) shows “EXPORT WITHOUT EXCHANGE” for 5 minutes; the Exchange counts affected Lines
+- Offline export: longer heartbeat tolerance (10 s) so slow renders do not drop the engine; host bypass of the Exchange clears the heartbeat immediately
+- Hub layout v4
+- Manual DE/EN: new chapter “Export and recording”, quick start, troubleshooting
+- Smoke test: engine steps per audio time, offline flag, recording/playback without Exchange (identical values, offline and real time), project state round trip, export warning, clear; cross-process test keeps the Exchange running until the child finishes
+
 ## 1.0.1 – 2026-11-09 (housekeeping)
 - README, CHANGELOG, contribution guide, issue and pull request templates in English
 - Manual DE/EN: installation steps for any VST3 host (no longer Ableton-specific), “project” instead of “Live Set”

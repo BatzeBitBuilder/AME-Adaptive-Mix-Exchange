@@ -49,6 +49,8 @@ void SlotAudioData::reset() noexcept
     targetHpfHz.store (0.0f);  targetGainDb.store (0.0f);
     appliedHpfHz.store (0.0f); appliedGainDb.store (0.0f);
     frozen.store (false); bypassed.store (false);
+    engMode.store (-1); engRole.store (0);
+    learnMode.store (0); learnSec.store (0.0f); learnActive.store (false); renderWarnMs.store (0);
     for (auto* f : { &fCentroid, &fFlatness, &fSub, &fLow, &fHigh, &fOnsetRate, &fHarmonicity, &fPitch, &fPitchVar, &fCrest, &fWidth, &fActiveSec })
         f->store (0.0f);
 }
@@ -57,7 +59,7 @@ void SlotAudioData::reset() noexcept
 namespace
 {
 // Bei jeder Änderung von HubShared/SlotAudioData erhöhen → verschiedene AME-Versionen teilen keinen Speicher
-constexpr uint32_t kLayoutVersion = 3;
+constexpr uint32_t kLayoutVersion = 4;
 constexpr uint32_t kMagic = 0x414d4548;   // "AMEH"
 
 uint32_t currentPid() noexcept
@@ -456,6 +458,10 @@ void MixHub::updateInfo (int slot, const juce::String& name, juce::Colour colour
     info.autoRole = autoRole;
     info.autoConfidence = autoConfidence;
     info.autoFromName = autoFromName;
+
+    auto& a = shared.audio[(size_t) slot];
+    a.engRole.store ((int) role, std::memory_order_relaxed);
+    a.engMode.store ((int) mode, std::memory_order_release);
 }
 
 std::vector<TrackSnapshot> MixHub::getSnapshot() const

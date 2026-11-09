@@ -22,58 +22,52 @@ float dbToPow (float db) { return std::pow (10.0f, db * 0.1f); }
 
 MixEngine::MixEngine (MixHub& h) : hub (h) {}
 
-MixEngine::~MixEngine()
+void MixEngine::prepare (double sampleRate) noexcept
 {
-    stopTimer();
+    intervalSamples = juce::jmax (1, juce::roundToInt (sampleRate * kIntervalMs * 0.001));
+    sampleCounter = 0;
 }
 
-void MixEngine::setActive (bool shouldBeActive)
+void MixEngine::advance (int numSamples) noexcept
 {
-    if (shouldBeActive && ! isTimerRunning())
-        startTimer (kIntervalMs);
-    else if (! shouldBeActive && isTimerRunning())
+    sampleCounter += numSamples;
+    while (sampleCounter >= intervalSamples)
     {
-        stopTimer();
-        hub.engineHeartbeatMs.store (0);   // Lines sofort ohne Engine (nicht erst nach Ablauf des Lebenszeichens)
+        sampleCounter -= intervalSamples;
+        step();
     }
 }
 
-void MixEngine::step()
+void MixEngine::step() noexcept
 {
-    const auto tracks = hub.getSnapshot();
     const auto genre = (Genre) juce::jlimit (0, (int) Genre::NumGenres - 1, hub.globalGenre.load());
     const auto gp = getGenreProfile (genre);
 
-    struct T
+    int n = 0;
+    for (int slot = 0; slot < kMaxSlots; ++slot)
     {
-        int slot;
-        const RoleProfile* profile;
-        std::array<float, B> avg {}, fast {}, shapeRel {}, spreadAvg {}, prio {}, cut {};
-        float maxDb = -200.0f, totalDb = -100.0f, reaction = 0.3f;
-    };
-
-    std::vector<T> ts;
-    ts.reserve (tracks.size());
-
-    for (const auto& s : tracks)
-    {
-        if (s.mode != InstanceMode::Track || ! s.hasAnalysis)
+        auto* s = hub.getAudioData (slot);
+        if (s->engMode.load (std::memory_order_acquire) != (int) InstanceMode::Track
+             || s->analysisCounter.load (std::memory_order_acquire) == 0)
             continue;
 
-        T t;
-        t.slot = s.slot;
-        t.profile = &getRoleProfile (genre, s.role);
-        t.reaction = juce::jlimit (0.0f, 1.0f, s.reaction);
+        auto& t = ts[(size_t) n++];
+        t.slot = slot;
+        t.profile = &getRoleProfile (genre, (Role) s->engRole.load (std::memory_order_relaxed));
+        t.reaction = juce::jlimit (0.0f, 1.0f, s->reaction.load (std::memory_order_relaxed));
+        t.maxDb = -200.0f;
+        t.cut.fill (0.0f);
+        const float prioOffset = s->priorityOffset.load (std::memory_order_relaxed);
 
         float pow = 0.0f;
         for (int b = 0; b < B; ++b)
         {
-            t.avg[(size_t) b] = s.bandAvgDb[(size_t) b];
-            t.fast[(size_t) b] = s.bandDb[(size_t) b];
+            t.avg[(size_t) b] = s->bandAvgDb[(size_t) b].load (std::memory_order_relaxed);
+            t.fast[(size_t) b] = s->bandDb[(size_t) b].load (std::memory_order_relaxed);
             t.maxDb = juce::jmax (t.maxDb, t.avg[(size_t) b]);
             if (t.avg[(size_t) b] > floorDb) pow += dbToPow (t.avg[(size_t) b]);
             t.prio[(size_t) b] = juce::jlimit (0.0f, 1.5f, getPriorityAt (*t.profile, SpectrumAnalyzer::getBandCentreHz (b))
-                                                          + s.priorityOffset);
+                                                          + prioOffset);
         }
         t.totalDb = 10.0f * std::log10 (pow + 1.0e-12f);
 
@@ -88,11 +82,7 @@ void MixEngine::step()
             if (b < B - 1) e = juce::jmax (e, t.avg[(size_t) b + 1] - spreadDb);
             t.spreadAvg[(size_t) b] = e;
         }
-
-        ts.push_back (std::move (t));
     }
-
-    const int n = (int) ts.size();
 
     // --- Absenkungen: L (niedrigere Priorität) weicht H aus, wo beide im selben Band konkurrieren ---
     for (int l = 0; l < n; ++l)
@@ -129,24 +119,25 @@ void MixEngine::step()
     // --- Lautstärke: Rollen-Verhältnisse herstellen, Summenleistung konstant halten ---
     // Ziel je Spur: ref + levelDb. ref so gewählt, dass Σ Leistung vorher = nachher;
     // wegen der Begrenzung iterativ nachgeführt.
-    std::vector<float> gains ((size_t) n, 0.0f);
+    std::fill (gains.begin(), gains.begin() + n, 0.0f);
     {
-        std::vector<int> active;
+        int numActive = 0;
         float powBefore = 0.0f;
         for (int i = 0; i < n; ++i)
-            if (ts[(size_t) i].totalDb > -60.0f) { active.push_back (i); powBefore += dbToPow (ts[(size_t) i].totalDb); }
+            if (ts[(size_t) i].totalDb > -60.0f) { active[(size_t) numActive++] = i; powBefore += dbToPow (ts[(size_t) i].totalDb); }
 
-        if (active.size() > 1)
+        if (numActive > 1)
         {
             float targetPow = 0.0f;
-            for (int i : active) targetPow += dbToPow (ts[(size_t) i].profile->levelDb);
+            for (int a = 0; a < numActive; ++a) targetPow += dbToPow (ts[(size_t) active[(size_t) a]].profile->levelDb);
             float ref = 10.0f * std::log10 (powBefore / targetPow);
 
             for (int iter = 0; iter < 4; ++iter)
             {
                 float powAfter = 0.0f;
-                for (int i : active)
+                for (int a = 0; a < numActive; ++a)
                 {
+                    const int i = active[(size_t) a];
                     const auto& t = ts[(size_t) i];
                     gains[(size_t) i] = juce::jlimit (-gp.maxGainDb, gp.maxGainDb, ref + t.profile->levelDb - t.totalDb);
                     powAfter += dbToPow (t.totalDb + gains[(size_t) i]);
@@ -208,17 +199,17 @@ void MixEngine::step()
     // Pegelangleich für die Roh-Abhöre: Summenleistung bearbeitet / unbearbeitet (Spuren als unkorreliert genähert)
     {
         double dry = 0.0, wet = 0.0;
-        for (const auto& s : tracks)
-            if (s.mode == InstanceMode::Track)
-                if (auto* d = hub.getAudioData (s.slot))
-                {
-                    dry += d->dryPow.load (std::memory_order_relaxed);
-                    wet += d->wetPow.load (std::memory_order_relaxed);
-                }
+        for (int slot = 0; slot < kMaxSlots; ++slot)
+            if (auto* d = hub.getAudioData (slot); d->engMode.load (std::memory_order_relaxed) == (int) InstanceMode::Track)
+            {
+                dry += d->dryPow.load (std::memory_order_relaxed);
+                wet += d->wetPow.load (std::memory_order_relaxed);
+            }
         const float db = (dry > 1.0e-9 && wet > 1.0e-9) ? (float) (10.0 * std::log10 (wet / dry)) : 0.0f;
         hub.rawMatchDb.store (juce::jlimit (-12.0f, 12.0f, db), std::memory_order_relaxed);
     }
 
     hub.engineHeartbeatMs.store (juce::jmax (1u, juce::Time::getMillisecondCounter()), std::memory_order_relaxed);
+    stepCount.fetch_add (1, std::memory_order_relaxed);
 }
 } // namespace ame

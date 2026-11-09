@@ -82,6 +82,31 @@ MainView::MainView (AmeProcessor& p)
     addAndMakeVisible (freezeAllButton);
     addAndMakeVisible (releaseAllButton);
 
+    // Mitschnitt (alle Lines)
+    learnBarLabel.setFont (ame::ui::fonts::label (17.0f));
+    learnBarLabel.setColour (juce::Label::textColourId, col::ink);
+    addAndMakeVisible (learnBarLabel);
+    learnStatus.setFont (ame::ui::fonts::mono (12.0f, true));
+    learnStatus.setColour (juce::Label::textColourId, col::ink);
+    learnStatus.setMinimumHorizontalScale (0.6f);
+    addAndMakeVisible (learnStatus);
+    learnRecAll.onClick   = [this] { proc.getHub().sendLearnCommand (MixHub::learnRecord); };
+    learnPlayAll.onClick  = [this] { proc.getHub().sendLearnCommand (MixHub::learnPlay); };
+    learnLiveAll.onClick  = [this] { proc.getHub().sendLearnCommand (MixHub::learnLive); };
+    learnClearAll.onClick = [this]
+    {
+        juce::NativeMessageBox::showOkCancelBox (juce::MessageBoxIconType::QuestionIcon,
+            tr ("Mitschnitt löschen", "Clear recording"),
+            tr ("Die Mitschnitte aller Lines löschen?", "Clear the recordings of all lines?"), this,
+            juce::ModalCallbackFunction::create ([this] (int r)
+            {
+                if (r != 0)
+                    proc.getHub().sendLearnCommand (MixHub::learnClear);
+            }));
+    };
+    for (auto* b : { &learnRecAll, &learnPlayAll, &learnLiveAll, &learnClearAll })
+        addAndMakeVisible (*b);
+
     overviewButton.setClickingTogglesState (true);
     overviewButton.onClick = [this] { updateVisibility(); };
     addAndMakeVisible (overviewButton);
@@ -153,6 +178,20 @@ void MainView::updateTexts()
     levelMatch.setTooltip (tr ("Roh: Lautheitsunterschied zur bearbeiteten Fassung am Exchange-Ausgang ausgleichen – fairer Vergleich",
                                "Raw: compensate the loudness difference to the processed mix at the exchange output – fair comparison"));
     freezeAllButton.setButtonText (tr ("Hold (alle)", "Hold (all)"));
+    learnBarLabel.setText (tr ("MITSCHNITT", "RECORDING"), juce::dontSendNotification);
+    learnRecAll.setButtonText (tr ("Aufnahme (alle)", "Record (all)"));
+    learnPlayAll.setButtonText (tr ("Wiedergabe (alle)", "Playback (all)"));
+    learnLiveAll.setButtonText (tr ("Live (alle)", "Live (all)"));
+    learnClearAll.setButtonText (tr ("Löschen", "Clear"));
+    learnRecAll.setTooltip (tr ("Alle Lines nehmen ihre adaptiven Werte über die Songposition auf, solange der Transport läuft. "
+                                "Song einmal komplett abspielen (Abhöre Voll).",
+                                "All lines record their adaptive values along the song position while the transport runs. "
+                                "Play the whole song once (monitor Full)."));
+    learnPlayAll.setTooltip (tr ("Alle Lines spielen ihren Mitschnitt ab: Export = Abhöre, unabhängig von Engine und Render-Geschwindigkeit.",
+                                 "All lines play back their recording: export = monitor, independent of engine and render speed."));
+    learnLiveAll.setTooltip (tr ("Alle Lines wieder live: die Engine regelt laufend (Mitschnitt bleibt erhalten).",
+                                 "All lines back to live: the engine adapts continuously (recording is kept)."));
+    learnClearAll.setTooltip (tr ("Mitschnitte aller Lines löschen", "Clear the recordings of all lines"));
     releaseAllButton.setButtonText (tr ("Hold lösen", "Release"));
     manualButton.setButtonText (tr ("HANDBUCH", "MANUAL"));
     manualButton.setTooltip (tr ("Handbuch öffnen", "Open the manual"));
@@ -202,6 +241,9 @@ void MainView::updateVisibility()
         c->setVisible (master);
     freezeAllButton.setVisible (master);
     releaseAllButton.setVisible (master);
+    for (juce::Component* c : { (juce::Component*) &learnBarLabel, (juce::Component*) &learnStatus, (juce::Component*) &learnRecAll,
+                                (juce::Component*) &learnPlayAll, (juce::Component*) &learnLiveAll, (juce::Component*) &learnClearAll })
+        c->setVisible (master);
 
     const bool showOverview = master || overviewButton.getToggleState();
     overview.setVisible (showOverview);
@@ -297,6 +339,42 @@ void MainView::timerCallback()
 
     statusLabel.setText (status, juce::dontSendNotification);
 
+    // Mitschnitt-Übersicht (Exchange)
+    if (mode == InstanceMode::Master)
+    {
+        int live = 0, rec = 0, play = 0, warn = 0, recNow = 0;
+        float longest = 0.0f;
+        const auto nowMs = juce::Time::getMillisecondCounter();
+        for (const auto& t : hub.getSnapshot())
+            if (t.mode == InstanceMode::Track)
+                if (auto* d = hub.getAudioData (t.slot))
+                {
+                    const int lm = d->learnMode.load();
+                    (lm == 1 ? rec : lm == 2 ? play : live)++;
+                    if (d->learnActive.load()) ++recNow;
+                    longest = juce::jmax (longest, d->learnSec.load());
+                    const auto rw = d->renderWarnMs.load();
+                    if (rw != 0 && nowMs - rw < 5u * 60u * 1000u) ++warn;
+                }
+        const int sec = juce::roundToInt (longest);
+        juce::String ls;
+        ls << "LIVE " << live << tr (" · AUFNAHME ", " · RECORD ") << rec << tr (" · WIEDERGABE ", " · PLAYBACK ") << play
+           << AME_TXT (" · ") << (sec / 60) << ":" << juce::String (sec % 60).paddedLeft ('0', 2);
+        juce::Colour lc = col::ink;
+        if (recNow > 0)
+        {
+            ls << tr (" · NIMMT AUF", " · RECORDING");
+            lc = col::warn;
+        }
+        if (warn > 0)
+        {
+            ls << AME_TXT (" · ") << warn << tr ("× EXPORT OHNE EXCHANGE", "× EXPORT WITHOUT EXCHANGE");
+            lc = col::rust;
+        }
+        learnStatus.setText (ls, juce::dontSendNotification);
+        learnStatus.setColour (juce::Label::textColourId, lc);
+    }
+
     // Tooltip: Art der Verbindung zwischen den Instanzen
     const int procs = hub.getNumProcesses();
     juce::String link = hub.isShared()
@@ -363,6 +441,9 @@ void MainView::paint (juce::Graphics& g)
     }
 
     paintLogo (g);
+
+    if (! learnBar.isEmpty())
+        ame::ui::drawEngravedPanel (g, learnBar.toFloat(), {});
 
     // Schrauben
     for (auto p : { front.getTopLeft().translated (7.0f, 7.0f), front.getTopRight().translated (-7.0f, 7.0f),
@@ -438,6 +519,24 @@ void MainView::resized()
     }
 
     strip.setBounds (area);
+
+    // Exchange: Mitschnitt-Leiste über der Mix-Übersicht
+    learnBar = {};
+    if (proc.getMode() == InstanceMode::Master)
+    {
+        learnBar = area.removeFromTop (44).reduced (8, 0).withTrimmedTop (6);
+        auto bar = learnBar.reduced (10, 4);
+        learnBarLabel.setBounds (bar.removeFromLeft (104));
+        learnRecAll.setBounds (bar.removeFromLeft (132).reduced (0, 2));
+        bar.removeFromLeft (4);
+        learnPlayAll.setBounds (bar.removeFromLeft (142).reduced (0, 2));
+        bar.removeFromLeft (4);
+        learnLiveAll.setBounds (bar.removeFromLeft (100).reduced (0, 2));
+        bar.removeFromLeft (4);
+        learnClearAll.setBounds (bar.removeFromLeft (80).reduced (0, 2));
+        bar.removeFromLeft (12);
+        learnStatus.setBounds (bar);
+    }
     overview.setBounds (area);
     handbook.setBounds (getLocalBounds().withTrimmedLeft (cheek).withTrimmedRight (cheek).withTrimmedTop (headerH));
 }

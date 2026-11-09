@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(AME VERSION 1.0.1 LANGUAGES C CXX)
+project(AME VERSION 1.0.2 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -68,7 +68,8 @@ target_sources(AME PRIVATE
     Source/i18n/Lang.cpp
         Source/Settings.cpp
         Source/dsp/StripParams.cpp
-        Source/engine/StripPresets.cpp)
+        Source/engine/StripPresets.cpp
+        Source/engine/Recording.cpp)
 
 target_include_directories(AME PRIVATE Source)
 
@@ -120,7 +121,8 @@ if(AME_BUILD_TESTS)
         Source/i18n/Lang.cpp
         Source/Settings.cpp
         Source/dsp/StripParams.cpp
-        Source/engine/StripPresets.cpp)
+        Source/engine/StripPresets.cpp
+        Source/engine/Recording.cpp)
     target_include_directories(AMESmokeTest PRIVATE Source)
     target_compile_definitions(AMESmokeTest PRIVATE
         JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1

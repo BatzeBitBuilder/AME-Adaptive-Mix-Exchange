@@ -14,6 +14,7 @@ Put AME on your tracks (**Line**) and one instance on the master bus (**Exchange
 - **Adaptive engine** with 6 programs (Rock/Band, Pop, Electronic, Hip-Hop, Acoustic/Singer-Songwriter, Metal), track roles, priority and response time per track; it only cuts and keeps the total level constant – your manual EQ is never touched
 - **Auto role detection** from the track name and the sound
 - **Exchange monitor**: Full / No Engine / Raw with level match; Direct (A/B) and Hold per track
+- **Export = monitor**: engine on the audio clock; **Recording** captures the adaptive processing along the song and replays it exactly – reproducible exports, also for stems
 - **Presets**: factory presets per role, user presets, A/B compare
 - **Visualisation**: analyser, spectrogram, masking patchbay, mix overview, VU meters
 - Vintage “valve gear” interface, freely scalable (50–200 %), **English/German** UI
@@ -33,7 +34,8 @@ Put AME on your tracks (**Line**) and one instance on the master bus (**Exchange
 1. Load AME on every track that should take part – mode **Line (Track)** – and choose a **Role** (or leave it on **Auto-ID**).
 2. Load one AME on the **master bus** and set its mode to **Exchange (Master)**.
 3. Choose a **Program** in the Exchange and start playback.
-4. Compare with the **Monitor** buttons (Full / No Engine / Raw) and freeze good results with **Hold (all)**.
+4. Compare with the **Monitor** buttons (Full / No Engine / Raw).
+5. Happy with it? **Record (all)**, play the song once, **Playback (all)** – exports now sound exactly like the monitor.
 
 Without an Exchange every Line works as a normal channel strip without adaptive processing. Details: see the [manual](docs/manual/manual_en.md).
 

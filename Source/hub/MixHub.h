@@ -76,6 +76,15 @@ struct SlotAudioData
     std::atomic<float> appliedGainDb { 0.0f };
     std::atomic<bool> frozen { false }, bypassed { false };
 
+    // Registry-Kopie für die Engine (lock-frei lesbar im Audio-Thread): -1 = Slot frei
+    std::atomic<int> engMode { -1 }, engRole { 0 };
+
+    // Mitschnitt (Lernlauf): 0 = Live, 1 = Aufnahme, 2 = Wiedergabe; aufgezeichnete Länge; nimmt gerade auf
+    std::atomic<int> learnMode { 0 };
+    std::atomic<float> learnSec { 0.0f };
+    std::atomic<bool> learnActive { false };
+    std::atomic<uint32_t> renderWarnMs { 0 };   // Zeitpunkt (ms-Zähler): schneller Export ohne Engine-Daten
+
     // Klangmerkmale (SpectrumAnalyzer)
     std::atomic<float> fCentroid { 0 }, fFlatness { 0 }, fSub { 0 }, fLow { 0 }, fHigh { 0 }, fOnsetRate { 0 },
                        fHarmonicity { 0 }, fPitch { 0 }, fPitchVar { 0 }, fCrest { 0 }, fWidth { 0 }, fActiveSec { 0 };
@@ -143,6 +152,9 @@ struct HubShared
     std::atomic<uint32_t> engineHeartbeatMs { 0 };
     std::atomic<int>      monitorMode { 0 };     // Abhöre: 0 = Voll, 1 = Ohne Amt, 2 = Roh
     std::atomic<float>    rawMatchDb { 0.0f };   // Summe bearbeitet minus roh (dB), von der Engine
+    std::atomic<bool>     engineOffline { false };   // Exchange rendert offline (Export) → großzügigere Lebenszeichen
+    std::atomic<uint32_t> learnCommandGen { 0 };     // Befehl "Mitschnitt" vom Exchange an alle Lines
+    std::atomic<int>      learnCommandValue { 0 };   // 0 = Live, 1 = Aufnahme, 2 = Wiedergabe, 3 = Löschen
 
     uint32_t nextInstanceId = 1;    // nur unter Hub-Sperre
     std::array<HubSlotInfo, kMaxSlots> infos {};
@@ -204,6 +216,17 @@ public:
 
     // Lebenszeichen der Engine (Millisekunden-Zähler, systemweit); veraltet = keine adaptiven Eingriffe
     std::atomic<uint32_t>& engineHeartbeatMs { shared.engineHeartbeatMs };
+    std::atomic<bool>&     engineOffline     { shared.engineOffline };
+
+    // Befehl "Mitschnitt" vom Master an alle Lines (wie Hold: Lines reagieren auf die neue Generation)
+    enum LearnCommand { learnLive = 0, learnRecord = 1, learnPlay = 2, learnClear = 3 };
+    std::atomic<uint32_t>& learnCommandGen   { shared.learnCommandGen };
+    std::atomic<int>&      learnCommandValue { shared.learnCommandValue };
+    void sendLearnCommand (int cmd) noexcept
+    {
+        learnCommandValue.store (cmd);
+        learnCommandGen.fetch_add (1);
+    }
 
     // Abhöre des Exchange (gilt nur, solange die Engine läuft) und Pegelunterschied roh/bearbeitet
     std::atomic<int>&   monitorMode { shared.monitorMode };
@@ -212,7 +235,9 @@ public:
     bool isEngineAlive() const noexcept
     {
         const auto hb = engineHeartbeatMs.load (std::memory_order_relaxed);
-        return hb != 0 && juce::Time::getMillisecondCounter() - hb < 500;
+        // Offline-Export: Blöcke können langsamer als Echtzeit kommen → längere Frist
+        const uint32_t limit = engineOffline.load (std::memory_order_relaxed) ? 10000u : 500u;
+        return hb != 0 && juce::Time::getMillisecondCounter() - hb < limit;
     }
 
 private:

@@ -1,6 +1,6 @@
 # AME – Adaptive Mix Exchange
 
-**Handbuch · Version 1.0.1** · entwickelt von **Batze the bit builder**
+**Handbuch · Version 1.0.2** · entwickelt von **Batze the bit builder**
 
 *Every track finds its aim.* – Jede Spur bekommt ihren Platz.
 
@@ -15,6 +15,7 @@ AME ist ein vernetzter Channelstrip (VST3). Jede Instanz auf einer Spur heißt *
 - **Adaptive Engine** im Exchange: berechnet aus Programm (Genre), Rollen und Vorrang, welche Spur wo ausweicht.
 - **Eigene adaptive Stufe** pro Line: 10 Oktav-Absenkungen, Hochpass und Lautstärke. Deine manuellen EQ-Einstellungen bleiben unangetastet.
 - **Volle Kontrolle**: Direkt (A/B-Vergleich), Hold (Werte einfrieren), Stärke und Ansprechzeit pro Spur.
+- **Export = Abhöre**: Die Engine rechnet im Takt des Audios, und der **Mitschnitt** zeichnet die Eingriffe über den Song auf und spielt sie exakt wieder ab – auch beim Export einzelner Spuren.
 
 > AME hilft beim Aufräumen eines Mixes – es ersetzt nicht dein Gehör. Nutze die Eingriffe als Vorschlag, vergleiche mit **Direkt** und friere gute Ergebnisse mit **Hold** ein.
 
@@ -42,7 +43,8 @@ AME ist ein vernetzter Channelstrip (VST3). Jede Instanz auf einer Spur heißt *
 3. **Eine AME-Instanz auf den Master-Bus** legen und den Modus auf **Exchange (Master)** stellen.
 4. Im Exchange das **Programm** wählen (z. B. Rock / Band, Pop, Electronic).
 5. Wiedergabe starten. Nach wenigen Sekunden leuchtet die Lampe **ENGINE**, die Lines weichen sich gegenseitig aus.
-6. Mit der **Abhöre** im Exchange vergleichen: **Voll** / **Ohne Amt** / **Roh**. Gefällt das Ergebnis: **Hold (alle)**.
+6. Mit der **Abhöre** im Exchange vergleichen: **Voll** / **Ohne Amt** / **Roh**.
+7. Gefällt das Ergebnis: im Exchange **Aufnahme (alle)**, den Song einmal komplett abspielen, dann **Wiedergabe (alle)**. Der Export klingt jetzt genau wie die Abhöre (siehe Kapitel „Export und Mitschnitt“).
 
 > Ohne Exchange laufen alle Lines „solo": Der Channelstrip funktioniert normal, es gibt aber keine adaptiven Eingriffe.
 
@@ -64,7 +66,7 @@ AME ist ein vernetzter Channelstrip (VST3). Jede Instanz auf einer Spur heißt *
 
 - Alle Instanzen im selben Projekt finden sich automatisch (gemeinsamer Speicher der DAW-Sitzung, auch über Plug-in-Prozesse hinweg). Es gibt nichts zu verbinden.
 - Jede Line analysiert ihr Signal (FFT, 32 Bänder, Kurz- und Langzeitspektrum) und stellt es den anderen bereit.
-- Das Exchange berechnet 50-mal pro Sekunde Zielwerte für jede Line und schickt sie zurück.
+- Das Exchange berechnet je 20 ms Audio (50-mal pro Sekunde) Zielwerte für jede Line und schickt sie zurück.
 - Jede Line nähert sich diesen Zielen geglättet an – mit der eingestellten Ansprechzeit.
 
 Gibt es mehrere Exchange-Instanzen, ist nur die **älteste** aktiv; die anderen zeigen „[EX–]" und einen Hinweis in der Statuszeile.
@@ -143,8 +145,9 @@ In der rechten Spalte: **Pan**, **Width** (0–200 %, 100 % = unverändert, 0 % 
 - Lampen **EQ / HPF / Gain** – welche Eingriffsarten erlaubt sind.
 - **Direkt** – Eingriffe dieser Line aus (A/B, mit 30 ms Überblendung).
 - **Hold** – aktuelle Werte festhalten.
+- **Mitschnitt** – **Live** (Engine regelt laufend), **Aufnahme** (angewendete Werte über die Songposition aufzeichnen) oder **Wiedergabe** (Aufzeichnung exakt abspielen). Siehe Kapitel „Export und Mitschnitt“.
 
-Die LED-Anzeige rechts zeigt die aktuelle Absenkung je Oktavband (31 Hz–16 kHz, bis −9 dB Skala), dazu adaptiven Hochpass und Lautstärkekorrektur sowie den Status (EXCHANGE VERBUNDEN, NO EXCHANGE, DIREKT, HOLD).
+Die LED-Anzeige rechts zeigt die aktuelle Absenkung je Oktavband (31 Hz–16 kHz, bis −9 dB Skala), dazu adaptiven Hochpass und Lautstärkekorrektur sowie den Status (EXCHANGE VERBUNDEN, NO EXCHANGE, DIREKT, HOLD, AUFNAHME LÄUFT, WIEDERGABE MITSCHNITT, EXPORT OHNE EXCHANGE).
 
 ### VU-Meter und Typenschild
 - **Ausgang**: VU-Ballistik (0 VU = −18 dBFS RMS), Peak-Lampe ab −1 dBFS.
@@ -170,6 +173,7 @@ Das Exchange schleift das Audiosignal unverändert durch und zeigt die **Mix-Üb
 - **Pegelangleich** – gleicht in der Stellung Roh den Lautheitsunterschied zur bearbeiteten Fassung am Exchange-Ausgang aus (±12 dB, Wert in der Statuszeile). So klingt nicht einfach die lautere Variante „besser“. Grundlage: Leistung vor und nach jeder Line (Näherung, Spuren als unkorreliert betrachtet).
 - **Exchange deaktivieren** (Gerät in der DAW aus bzw. Bypass) wirkt wie **Ohne Amt**: Die Engine stoppt, die Lines blenden ihre Eingriffe aus. Statuszeile und Lines zeigen „Exchange deaktiviert“.
 - **Hold (alle) / Hold lösen** – schaltet Hold auf allen Lines.
+- **Mitschnitt-Leiste** (über der Tabelle): **Aufnahme (alle)**, **Wiedergabe (alle)**, **Live (alle)** und **Löschen** (mit Rückfrage) für alle Lines. Daneben: wie viele Lines live, in Aufnahme oder Wiedergabe sind, die Länge des längsten Mitschnitts, „NIMMT AUF“ während der Aufnahme und eine Warnung, wenn Lines ohne Exchange exportiert wurden.
 
 ### Mix-Übersicht
 Die Tabelle listet alle Lines:
@@ -225,6 +229,8 @@ Eine manuell gewählte Rolle hat immer Vorrang.
 5. **Lautstärke**: Die Spuren werden auf die Rollen-Verhältnisse des Programms gebracht – die **Summenleistung bleibt dabei konstant**, der Mix wird also nicht einfach lauter oder leiser.
 6. **Ausgabe**: Die Absenkungen werden auf 10 Oktavbänder (31 Hz–16 kHz) abgebildet; die Line nähert sich ihnen mit ihrer Ansprechzeit (HPF und Gain mit ca. 2 s).
 
+Die Engine rechnet im **Takt des Audios**: ein Schritt je 20 ms Audio, ausgelöst vom Exchange. Ob die DAW in Echtzeit abspielt oder schneller bzw. langsamer exportiert, ändert also nichts am Verhalten.
+
 Die Engine **senkt nur ab** – sie hebt keine Frequenzen an. Dein manueller EQ wird nie verändert; die adaptive Stufe sitzt hinter Kompressor und EQ, vor Pan/Width.
 
 > Daten anderer Spuren sind mindestens einen Audio-Block alt (die DAW rechnet Spuren parallel). Deshalb arbeitet AME geglättet und nicht samplegenau.
@@ -235,7 +241,36 @@ Die Engine **senkt nur ab** – sie hebt keine Frequenzen an. Dein manueller EQ 
 - **Hold** friert die aktuellen adaptiven Werte ein. Sie werden im Projekt gespeichert und gelten auch ohne Exchange oder bei anderem Programm.
 - **Hold (alle) / Hold lösen** im Exchange schaltet Hold auf allen Lines.
 
-Typischer Ablauf: Programm wählen → Song einige Male durchlaufen lassen → mit der Abhöre vergleichen → Hold (alle) → Exchange bei Bedarf entfernen.
+Hold hält **einen** Zustand für den ganzen Song fest (den des Moments, in dem du Hold drückst) – der Mix ist dann nicht mehr adaptiv. Soll der Song adaptiv bleiben und trotzdem reproduzierbar sein, nutze den **Mitschnitt**.
+
+## Export und Mitschnitt
+
+Ziel: **Der Export klingt wie die Abhöre in der DAW.** AME sorgt dafür auf zwei Ebenen.
+
+**1. Engine im Takt des Audios.** Die Engine rechnet je 20 ms Audio einen Schritt – beim Abspielen genauso wie beim Offline-Export, egal wie schnell die DAW rendert. Ein Export im Live-Modus entspricht damit weitgehend der Abhöre. Kleine Abweichungen bleiben möglich: Die Regelung hängt vom Vorlauf ab (Startposition, vorherige Durchläufe), und die DAW rechnet Spuren parallel.
+
+**2. Mitschnitt – exakt und auch für Einzelspuren.** Jede Line zeichnet die tatsächlich angewendeten Werte (10 Absenkungen, Hochpass, Lautstärke) über die **Songposition** der DAW auf, 50 Werte pro Sekunde. In der Wiedergabe spielt sie genau diese Werte an genau dieser Stelle ab – ohne Engine, ohne Exchange, unabhängig von Render-Geschwindigkeit und Vorlauf. Der Song bleibt dabei adaptiv: Refrain und Strophe bekommen ihre eigenen Eingriffe.
+
+So geht's:
+1. Programm, Rollen, Vorrang und Amount einstellen, Song einige Male abspielen und mit der Abhöre vergleichen, bis es passt.
+2. Abhöre auf **Voll**. Im Exchange **Aufnahme (alle)**.
+3. Den Song **einmal komplett** abspielen (vom Anfang, oder nur die Abschnitte, die neu aufgenommen werden sollen – Aufnahme überschreibt nur die gespielten Stellen). Die Lines zeigen „AUFNAHME LÄUFT“ und die Länge.
+4. **Wiedergabe (alle)**. Ab jetzt klingt jede Wiedergabe und jeder Export identisch.
+5. Exportieren – Gesamtmix oder Einzelspuren (Stems), in Echtzeit oder offline. Das Exchange wird dafür nicht mehr gebraucht.
+
+Wissenswert:
+- Der Mitschnitt wird komprimiert **im Projekt gespeichert** (pro Line, bis 30 Minuten Songlänge).
+- In der Wiedergabe wirken Änderungen an Programm, Amount, Vorrang oder Ansprechzeit **nicht** – dafür neu aufnehmen oder auf **Live** schalten. Der manuelle Channelstrip und **Direkt** wirken weiter.
+- Nicht aufgenommene Stellen: Lücken bis 10 s werden überbrückt (nächster aufgenommener Wert), darüber hinaus keine Eingriffe.
+- Nach Änderungen am Arrangement (Teile verschoben, Tempo geändert) die betroffenen Stellen neu aufnehmen.
+- Pro Line wählbar im Bereich ADAPTIV (**Mitschnitt**), für alle Lines im Exchange. **Live (alle)** behält den Mitschnitt, **Löschen** entfernt ihn.
+- Mitschnitt hat Vorrang vor Hold.
+
+**Export ohne Mitschnitt – worauf achten:**
+- Das Exchange muss beim Export **mitlaufen**. Exportiert die DAW nur einzelne Spuren, ohne den Master-Bus zu verarbeiten, fehlen der Engine die Daten – die Lines laufen dann ohne adaptive Eingriffe. AME erkennt das (Export-Kennung der DAW oder Audio schneller als Echtzeit) und zeigt danach an der Line **EXPORT OHNE EXCHANGE – ADAPTIV FEHLTE**, im Exchange „× EXPORT OHNE EXCHANGE“ (5 Minuten lang). Abhilfe: Mitschnitt verwenden.
+- Ohne Mitschnitt hängt das Ergebnis vom Vorlauf ab: Export am besten vom Songanfang, nach einigen Durchläufen.
+
+Typischer Ablauf: Programm wählen → Song einige Male durchlaufen lassen → mit der Abhöre vergleichen → Aufnahme (alle) → Song einmal abspielen → Wiedergabe (alle) → exportieren. Alternativ, für einen festen Zustand: Hold (alle).
 
 ## Tipps für den Workflow
 
@@ -258,12 +293,16 @@ Typischer Ablauf: Programm wählen → Song einige Male durchlaufen lassen → m
 | Keine Eingriffe trotz Engine | Direkt aktiv? Amount auf 0? Lampen EQ/HPF/Gain aus? Hold aktiv? |
 | Spur fehlt in der Übersicht | Tooltip der Statuszeile zeigt die Verbindung: „nur innerhalb dieses Prozesses“ = gemeinsamer Speicher nicht verfügbar → Plug-ins im selben Prozess betreiben. Läuft die Instanz in einem Hilfsprozess, den AME nicht der DAW zuordnet, in allen Prozessen dieselbe Umgebungsvariable `AME_HUB_SESSION` setzen. |
 | Spur bleibt nach Absturz eines Plug-in-Prozesses stehen | Wird nach spätestens einer Sekunde automatisch entfernt. |
+| Export klingt anders als die Abhöre | Mitschnitt verwenden (Aufnahme → Song abspielen → Wiedergabe). Ohne Mitschnitt muss das Exchange beim Export mitlaufen. |
+| „EXPORT OHNE EXCHANGE – ADAPTIV FEHLTE“ | Die Line wurde exportiert, während kein Exchange rechnete (z. B. Einzelspur-Export). Mitschnitt aufnehmen und auf Wiedergabe stellen. |
+| „WIEDERGABE – KEIN MITSCHNITT“ | Die Line steht auf Wiedergabe, hat aber nichts aufgezeichnet: Aufnahme wählen und den Song abspielen. |
+| „AUFNAHME – KEIN EXCHANGE AKTIV“ | Ohne laufende Engine würde nur „keine Eingriffe“ aufgezeichnet: Exchange aktivieren, Abhöre auf Voll. |
 | Auto-Kennung falsch | Spurnamen eindeutig benennen oder Rolle manuell setzen. |
 | Spurnamen „Line 01" … | Die DAW übermittelt keinen Namen – Rolle manuell setzen. |
 
 ## Über AME
 
-**AME – Adaptive Mix Exchange**, Version 1.0.1
+**AME – Adaptive Mix Exchange**, Version 1.0.2
 
 Entwickelt von **Batze the bit builder**.
 

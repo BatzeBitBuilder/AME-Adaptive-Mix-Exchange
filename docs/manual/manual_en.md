@@ -1,6 +1,6 @@
 # AME – Adaptive Mix Exchange
 
-**Operating Manual · Version 1.0.1** · built by **Batze the bit builder**
+**Operating Manual · Version 1.0.2** · built by **Batze the bit builder**
 
 *Every track finds its aim.*
 
@@ -15,6 +15,7 @@ AME is a networked channel strip (VST3). Every instance on a track is called a *
 - **Adaptive engine** in the Exchange: works out from program (genre), roles and priority which track should make room where.
 - **Dedicated adaptive stage** per Line: 10 octave cuts, high-pass and level. Your manual EQ settings are never touched.
 - **Full control**: Direct (A/B comparison), Hold (freeze values), amount and response per track.
+- **Export = monitor**: the engine runs on the audio clock, and the **recording** captures the processing along the song and plays it back exactly – even when exporting single tracks.
 
 > AME helps you clean up a mix – it does not replace your ears. Treat its moves as suggestions, compare with **Direct** and freeze good results with **Hold**.
 
@@ -42,7 +43,8 @@ AME is a networked channel strip (VST3). Every instance on a track is called a *
 3. **Put one AME instance on the master bus** and set its mode to **Exchange (Master)**.
 4. In the Exchange, choose a **Program** (e.g. Rock / Band, Pop, Electronic).
 5. Start playback. After a few seconds the **ENGINE** lamp lights up and the Lines start making room for each other.
-6. Compare with the **Monitor** in the Exchange: **Full** / **No Engine** / **Raw**. Happy with the result? Press **Hold (all)**.
+6. Compare with the **Monitor** in the Exchange: **Full** / **No Engine** / **Raw**.
+7. Happy with the result? In the Exchange press **Record (all)**, play the whole song once, then **Playback (all)**. Exports now sound exactly like the monitor (see chapter "Export and recording").
 
 > Without an Exchange every Line runs "solo": the channel strip works normally, but there is no adaptive processing.
 
@@ -64,7 +66,7 @@ AME is a networked channel strip (VST3). Every instance on a track is called a *
 
 - All instances in the same project find each other automatically (shared memory of the DAW session, even across plug-in processes). Nothing needs to be connected.
 - Every Line analyses its signal (FFT, 32 bands, short- and long-term spectrum) and shares it with the others.
-- The Exchange computes target values for each Line 50 times per second and sends them back.
+- The Exchange computes target values for each Line every 20 ms of audio (50 times per second) and sends them back.
 - Each Line moves smoothly towards these targets – at the response speed you set.
 
 If there are several Exchange instances, only the **oldest** one is active; the others show "[EX–]" and a note in the status line.
@@ -143,8 +145,9 @@ In the right-hand column: **Pan**, **Width** (0–200 %, 100 % = unchanged, 0 % 
 - **EQ / HPF / Gain** lamps – which kinds of processing are allowed.
 - **Direct** – processing of this Line off (A/B, with a 30 ms crossfade).
 - **Hold** – freeze the current values.
+- **Recording** – **Live** (engine adapts continuously), **Record** (capture the applied values along the song position) or **Playback** (replay the capture exactly). See chapter "Export and recording".
 
-The LED display on the right shows the current cut per octave band (31 Hz–16 kHz, scale down to −9 dB), the adaptive high-pass and level correction, and the status (EXCHANGE CONNECTED, NO EXCHANGE, DIRECT, HOLD).
+The LED display on the right shows the current cut per octave band (31 Hz–16 kHz, scale down to −9 dB), the adaptive high-pass and level correction, and the status (EXCHANGE CONNECTED, NO EXCHANGE, DIRECT, HOLD, RECORDING, PLAYBACK RECORDING, EXPORT WITHOUT EXCHANGE).
 
 ### VU meters and name plate
 - **Output**: VU ballistics (0 VU = −18 dBFS RMS), peak lamp from −1 dBFS.
@@ -170,6 +173,7 @@ The Exchange passes audio through unchanged and shows the **Mix Overview**. On L
 - **Level match** – in Raw, compensates the loudness difference to the processed mix at the Exchange output (±12 dB, value shown in the status line), so the louder version does not simply sound "better". Based on the power before and after each Line (approximation, tracks treated as uncorrelated).
 - **Deactivating the Exchange** (device off or bypassed in the DAW) acts like **No Engine**: the engine stops and the Lines fade out their processing. The status line and the Lines show "Exchange deactivated".
 - **Hold (all) / Release** – switches Hold on all Lines.
+- **Recording bar** (above the table): **Record (all)**, **Playback (all)**, **Live (all)** and **Clear** (with confirmation) for all Lines. Next to it: how many Lines are live, recording or playing back, the length of the longest recording, "RECORDING" while capturing and a warning if Lines were exported without an Exchange.
 
 ### Mix Overview
 The table lists all Lines:
@@ -225,6 +229,8 @@ A manually selected role always wins.
 5. **Level**: tracks are brought to the program's role ratios – **the total power stays constant**, so the mix does not simply get louder or quieter.
 6. **Output**: the cuts are mapped to 10 octave bands (31 Hz–16 kHz); each Line follows them with its response (HPF and gain with about 2 s).
 
+The engine runs on the **audio clock**: one step per 20 ms of audio, triggered by the Exchange. Whether the DAW plays in real time or exports faster or slower makes no difference to its behaviour.
+
 The engine **only cuts** – it never boosts frequencies. Your manual EQ is never changed; the adaptive stage sits after compressor and EQ, before pan/width.
 
 > Data from other tracks is at least one audio block old (the DAW processes tracks in parallel). That is why AME works smoothed rather than sample-accurate.
@@ -235,7 +241,36 @@ The engine **only cuts** – it never boosts frequencies. Your manual EQ is neve
 - **Hold** freezes the current adaptive values. They are saved with the project and stay in effect even without an Exchange or with a different program.
 - **Hold (all) / Release** in the Exchange switches Hold on all Lines.
 
-Typical workflow: choose a program → let the song play a few times → compare with the monitor → Hold (all) → remove the Exchange if you like.
+Hold freezes **one** state for the whole song (the one at the moment you press Hold) – the mix is no longer adaptive. To keep the song adaptive and still reproducible, use the **recording**.
+
+## Export and recording
+
+Goal: **the export sounds like the monitor in the DAW.** AME takes care of this on two levels.
+
+**1. Engine on the audio clock.** The engine computes one step per 20 ms of audio – during playback just as during an offline export, however fast the DAW renders. An export in Live mode therefore largely matches the monitor. Small differences remain possible: the processing depends on what played before (start position, previous passes), and the DAW processes tracks in parallel.
+
+**2. Recording – exact, also for single tracks.** Every Line captures the values it actually applies (10 cuts, high-pass, level) along the DAW's **song position**, 50 values per second. In playback it applies exactly these values at exactly that position – without engine, without Exchange, independent of render speed and pre-roll. The song stays adaptive: chorus and verse get their own processing.
+
+How to:
+1. Set program, roles, priority and amount, play the song a few times and compare with the monitor until you like it.
+2. Monitor on **Full**. In the Exchange press **Record (all)**.
+3. Play the song **once all the way through** (from the start, or only the sections you want to re-record – recording only overwrites the parts that are played). The Lines show "RECORDING" and the length.
+4. **Playback (all)**. From now on every playback and every export sounds identical.
+5. Export – full mix or single tracks (stems), real time or offline. The Exchange is no longer needed for this.
+
+Good to know:
+- The recording is saved **with the project**, compressed (per Line, up to 30 minutes of song length).
+- In playback, changes to program, amount, priority or response have **no** effect – record again or switch to **Live**. The manual channel strip and **Direct** keep working.
+- Parts not recorded: gaps up to 10 s are bridged (nearest recorded value), beyond that there is no processing.
+- After changing the arrangement (moved sections, tempo changes) re-record the affected parts.
+- Selectable per Line in the ADAPTIVE section (**Recording**), for all Lines in the Exchange. **Live (all)** keeps the recording, **Clear** removes it.
+- Recording playback takes precedence over Hold.
+
+**Exporting without a recording – what to watch:**
+- The Exchange must **run along** during the export. If the DAW exports single tracks without processing the master bus, the engine has no data – the Lines then run without adaptive processing. AME detects this (the DAW's offline flag or audio running faster than real time) and afterwards shows **EXPORT WITHOUT EXCHANGE – NO ADAPTIVE** on the Line and "× EXPORT WITHOUT EXCHANGE" in the Exchange (for 5 minutes). Remedy: use the recording.
+- Without a recording the result depends on what played before: best export from the start of the song, after a few passes.
+
+Typical workflow: choose a program → let the song play a few times → compare with the monitor → Record (all) → play the song once → Playback (all) → export. Alternatively, for one fixed state: Hold (all).
 
 ## Workflow tips
 
@@ -258,12 +293,16 @@ Typical workflow: choose a program → let the song play a few times → compare
 | No processing although the engine runs | Direct on? Amount at 0? EQ/HPF/Gain lamps off? Hold on? |
 | Track missing from the overview | The status line tooltip shows the link: "this process only" = shared memory not available → run plug-ins in the same process. If the instance runs in a helper process AME does not attribute to the DAW, set the same environment variable `AME_HUB_SESSION` for all processes. |
 | Track stays listed after a plug-in process crashed | Removed automatically within one second. |
+| Export sounds different from the monitor | Use the recording (Record → play the song → Playback). Without a recording the Exchange must run along during the export. |
+| "EXPORT WITHOUT EXCHANGE – NO ADAPTIVE" | The Line was exported while no Exchange was computing (e.g. single-track export). Record and switch to Playback. |
+| "PLAYBACK – NOTHING RECORDED" | The Line is set to Playback but has no recording: choose Record and play the song. |
+| "RECORD – NO ACTIVE EXCHANGE" | Without a running engine only "no processing" would be captured: activate the Exchange, monitor on Full. |
 | Auto-ID wrong | Give tracks clear names or set the role manually. |
 | Track names "Line 01" … | The DAW does not send a name – set the role manually. |
 
 ## About AME
 
-**AME – Adaptive Mix Exchange**, version 1.0.1
+**AME – Adaptive Mix Exchange**, version 1.0.2
 
 Built by **Batze the bit builder**.
 

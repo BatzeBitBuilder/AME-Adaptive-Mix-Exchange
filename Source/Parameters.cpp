@@ -174,6 +174,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     l.add (makeFloat  (pid::limCeiling, "Ceiling", { -12.0f, 0.0f, 0.1f }, -0.3f, "dB"));
     l.add (makeFloat  (pid::limRelease, "Limiter Release", [] { Range r { 5.0f, 500.0f }; r.setSkewForCentre (60.0f); return r; }(), 60.0f, "ms"));
 
+    // Mitschnitt (Lernlauf) je Line: Live / Aufnahme / Wiedergabe – nicht automatisierbar
+    l.add (makeChoice (pid::learnMode, "Recording", { "Live", "Record", "Playback" }, 0, false));
+
     return l;
 }
 } // namespace ame

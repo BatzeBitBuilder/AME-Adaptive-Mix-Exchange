@@ -16,6 +16,7 @@ AmeProcessor::AmeProcessor()
 {
     slot = hub->registerInstance (instanceId);
     lastFreezeCommandGen = hub->freezeCommandGen.load();
+    lastLearnCommandGen = hub->learnCommandGen.load();
     engine = std::make_unique<MixEngine> (*hub);
     startTimerHz (10);
 }
@@ -93,12 +94,20 @@ void AmeProcessor::timerCallback()
         hub->globalGenre.store (juce::roundToInt (param (pid::genre)));
         hub->globalAmount.store (param (pid::globalAmount) * 0.01f);
     }
-    // Engine nur, solange der Host das Exchange auch verarbeitet (deaktiviert/Bypass = wie "Ohne Amt")
+    // Engine nur, solange der Host das Exchange auch verarbeitet (deaktiviert/Bypass = wie "Ohne Amt").
+    // Gerechnet wird im Audio-Thread des Exchange (je 20 ms Audio), hier nur die Überwachung.
     const auto now = juce::Time::getMillisecondCounter();
-    const bool processing = ! hostBypassed.load() && lastAudioMs.load() != 0 && now - lastAudioMs.load() < 300;
+    const uint32_t audioTimeout = (master && hub->engineOffline.load()) ? 5000u : 300u;   // Export: Blöcke ggf. langsamer
+    const bool processing = ! hostBypassed.load() && lastAudioMs.load() != 0 && now - lastAudioMs.load() < audioTimeout;
+    const bool enabled = master && processing;
     exchangeSuspended.store (master && ! processing);
     activeMasterFlag.store (master);
-    engine->setActive (master && processing);
+    if (engineEnabled && ! enabled)
+    {
+        hub->engineHeartbeatMs.store (0);   // Lines sofort ohne Engine (nicht erst nach Ablauf des Lebenszeichens)
+        hub->engineOffline.store (false);
+    }
+    engineEnabled = enabled;
 
     if (master)
     {
@@ -117,6 +126,23 @@ void AmeProcessor::timerCallback()
                 fp->setValueNotifyingHost (hub->freezeCommandValue.load() ? 1.0f : 0.0f);
     }
 
+    // Befehl "Mitschnitt" vom Exchange
+    const auto lgen = hub->learnCommandGen.load();
+    if (lgen != lastLearnCommandGen)
+    {
+        lastLearnCommandGen = lgen;
+        if (getMode() == InstanceMode::Track)
+        {
+            const int cmd = hub->learnCommandValue.load();
+            if (cmd == MixHub::learnClear)
+                recording.clear();
+            else
+                setLearnMode (cmd);
+        }
+    }
+    if (juce::roundToInt (param (pid::learnMode)) == 1)
+        recording.allocate();   // Speicher erst bei Bedarf (einmalig)
+
     // Eingefrorene Werte im Projekt speichern
     if (frozenDirty.exchange (false))
         storeFrozenState();
@@ -130,6 +156,7 @@ void AmeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     matchGain.setCurrentAndTargetValue (1.0f);
     strip.prepare (sampleRate, getTotalNumOutputChannels());
     analyzer.prepare (sampleRate);
+    engine->prepare (sampleRate);
     meterRms = meterPeak = 0.0f;
     curCutDb.fill (0.0f);
     curHpfHz = curGainDb = 0.0f;
@@ -200,6 +227,29 @@ void AmeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
             const bool freeze = param (pid::adaptFreeze) > 0.5f;
 
             const float blockSec = (float) numSamples / (float) getSampleRate();
+
+            // Mitschnitt: Songposition der DAW
+            const int learn = juce::roundToInt (param (pid::learnMode));
+            double posSec = -1.0;
+            bool playing = false;
+            if (auto* ph = getPlayHead())
+                if (const auto pos = ph->getPosition())
+                {
+                    playing = pos->getIsPlaying();
+                    if (const auto t = pos->getTimeInSeconds())
+                        posSec = *t;
+                    else if (const auto smp = pos->getTimeInSamples())
+                        posSec = (double) *smp / getSampleRate();
+                }
+            AdaptiveRecording::Values rv;
+            const bool replay = learn == 2 && posSec >= 0.0 && recording.read (posSec, rv);
+            data->learnMode.store (learn, std::memory_order_relaxed);
+            data->learnSec.store (recording.getLengthSec(), std::memory_order_relaxed);
+
+            // Export erkannt (Host-Kennung oder schneller als Echtzeit), aber weder Engine noch Mitschnitt → Warnung
+            const bool fastRender = renderSpeed.update (numSamples, getSampleRate()) || isNonRealtime();
+            if (fastRender && ! replay && ! bypass && ! freeze && ! alive && param (pid::amount) > 0.0f)
+                data->renderWarnMs.store (juce::jmax (1u, juce::Time::getMillisecondCounter()), std::memory_order_relaxed);
             auto coef = [blockSec] (float tau) { return std::exp (-blockSec / tau); };
 
             // Einfrieren: aktuelle Werte übernehmen (einmalig beim Einschalten)
@@ -218,11 +268,12 @@ void AmeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
             }
 
             // A/B-Umschaltung schnell überblenden
-            if (bypass != lastBypass || freeze != lastFreeze)
+            if (bypass != lastBypass || freeze != lastFreeze || replay != lastReplay)
             {
                 fastBlendSec = 0.3f;
                 lastBypass = bypass;
                 lastFreeze = freeze;
+                lastReplay = replay;
             }
             const bool fast = fastBlendSec > 0.0f;
             fastBlendSec -= blockSec;
@@ -238,10 +289,16 @@ void AmeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
             {
                 float target = 0.0f;
                 if (! bypass)
-                    target = freeze ? frozenCutDb[k].load (std::memory_order_relaxed)
+                    target = replay ? rv.cutDb[k]
+                           : freeze ? frozenCutDb[k].load (std::memory_order_relaxed)
                                     : (eqOn ? data->targetCutDb[k].load (std::memory_order_relaxed) * amt : 0.0f);
-                const float c = target < curCutDb[k] ? att : rel;
-                curCutDb[k] = c * curCutDb[k] + (1.0f - c) * target;
+                if (replay && ! bypass && ! fast)
+                    curCutDb[k] = target;   // Mitschnitt enthält bereits die geglätteten Werte
+                else
+                {
+                    const float c = target < curCutDb[k] ? att : rel;
+                    curCutDb[k] = c * curCutDb[k] + (1.0f - c) * target;
+                }
                 p.adaptiveCutDb[k] = curCutDb[k];
                 data->appliedCutDb[k].store (curCutDb[k], std::memory_order_relaxed);
             }
@@ -252,7 +309,9 @@ void AmeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
             float hpfTarget = 0.0f;
             if (! bypass)
             {
-                if (freeze)
+                if (replay)
+                    hpfTarget = rv.hpfHz;
+                else if (freeze)
                     hpfTarget = frozenHpfHz.load (std::memory_order_relaxed);
                 else
                 {
@@ -260,17 +319,31 @@ void AmeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
                     hpfTarget = (hpfOn && hpfT >= 20.0f) ? 20.0f * std::pow (hpfT / 20.0f, amt) : 0.0f;
                 }
             }
-            curHpfHz = slow * curHpfHz + (1.0f - slow) * hpfTarget;
+            curHpfHz = (replay && ! bypass && ! fast) ? hpfTarget : slow * curHpfHz + (1.0f - slow) * hpfTarget;
             p.adaptiveHpfHz = curHpfHz >= 21.0f ? curHpfHz : 0.0f;
             data->appliedHpfHz.store (p.adaptiveHpfHz, std::memory_order_relaxed);
 
             float gainTarget = 0.0f;
             if (! bypass)
-                gainTarget = freeze ? frozenGainDb.load (std::memory_order_relaxed)
+                gainTarget = replay ? rv.gainDb
+                           : freeze ? frozenGainDb.load (std::memory_order_relaxed)
                                     : (gainOn ? data->targetGainDb.load (std::memory_order_relaxed) * amt : 0.0f);
-            curGainDb = slow * curGainDb + (1.0f - slow) * gainTarget;
+            curGainDb = (replay && ! bypass && ! fast) ? gainTarget : slow * curGainDb + (1.0f - slow) * gainTarget;
             p.adaptiveGainDb = curGainDb;
             data->appliedGainDb.store (curGainDb, std::memory_order_relaxed);
+
+            // Mitschnitt aufnehmen: genau das, was gerade angewendet wird, an der Songposition
+            const bool rec = learn == 1 && playing && posSec >= 0.0 && recording.isAllocated();
+            if (rec)
+            {
+                AdaptiveRecording::Values v;
+                for (size_t k = 0; k < (size_t) kNumAdaptiveBands; ++k)
+                    v.cutDb[k] = curCutDb[k];
+                v.hpfHz = curHpfHz;
+                v.gainDb = curGainDb;
+                recording.write (posSec, blockSec, v);
+            }
+            data->learnActive.store (rec, std::memory_order_relaxed);
         }
 
         strip.processPost (buffer, p);
@@ -313,6 +386,13 @@ void AmeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     {
         // Master: Durchschleifen, Messung (vor dem Pegelangleich)
         analyzer.process (buffer, data);
+
+        // Engine im Takt des Audios: je 20 ms ein Schritt – Echtzeit und Export verhalten sich gleich
+        if (activeMasterFlag.load (std::memory_order_relaxed))
+        {
+            hub->engineOffline.store (isNonRealtime(), std::memory_order_relaxed);
+            engine->advance (numSamples);
+        }
 
         // Roh-Abhöre: Lautheitsunterschied zur bearbeiteten Fassung am Ausgang ausgleichen
         const bool raw = activeMasterFlag.load (std::memory_order_relaxed) && hub->isRawMonitor() && param (pid::levelMatch) > 0.5f;
@@ -370,6 +450,8 @@ void AmeProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer, juce:
 {
     // Host-Bypass: Exchange gilt als deaktiviert (Engine aus), Lines laufen ohne Eingriffe weiter
     hostBypassed.store (true, std::memory_order_relaxed);
+    if (activeMasterFlag.load (std::memory_order_relaxed))
+        hub->engineHeartbeatMs.store (0, std::memory_order_relaxed);   // Lines sofort ohne Engine
     lastAudioMs.store (juce::jmax (1u, juce::Time::getMillisecondCounter()), std::memory_order_relaxed);
     AudioProcessor::processBlockBypassed (buffer, midi);
 }
@@ -377,6 +459,18 @@ void AmeProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer, juce:
 void AmeProcessor::setMonitor (int mode)
 {
     if (auto* prm = apvts.getParameter (pid::monitor))
+    {
+        prm->beginChangeGesture();
+        prm->setValueNotifyingHost (prm->convertTo0to1 ((float) juce::jlimit (0, 2, mode)));
+        prm->endChangeGesture();
+    }
+}
+
+void AmeProcessor::setLearnMode (int mode)
+{
+    if (juce::jlimit (0, 2, mode) == 1)
+        recording.allocate();
+    if (auto* prm = apvts.getParameter (pid::learnMode))
     {
         prm->beginChangeGesture();
         prm->setValueNotifyingHost (prm->convertTo0to1 ((float) juce::jlimit (0, 2, mode)));
@@ -392,7 +486,17 @@ juce::AudioProcessorEditor* AmeProcessor::createEditor()
 void AmeProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     if (auto xml = apvts.copyState().createXml())
+    {
+        // Mitschnitt (komprimiert) nur im Projekt, nicht im ValueTree (kein Undo, keine A/B-Kopie)
+        const auto rec = recording.toBase64();
+        if (rec.isNotEmpty())
+        {
+            auto* e = xml->createNewChildElement ("AdaptiveRecording");
+            e->setAttribute ("fps", AdaptiveRecording::kFramesPerSecond);
+            e->setAttribute ("data", rec);
+        }
         copyXmlToBinary (*xml, destData);
+    }
 }
 
 void AmeProcessor::setStateInformation (const void* data, int sizeInBytes)
@@ -400,6 +504,16 @@ void AmeProcessor::setStateInformation (const void* data, int sizeInBytes)
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
         if (xml->hasTagName (apvts.state.getType()))
         {
+            if (auto* e = xml->getChildByName ("AdaptiveRecording"))
+            {
+                recording.fromBase64 (e->getStringAttribute ("data"));
+                xml->removeChildElement (e, true);
+            }
+            else
+            {
+                recording.clear();
+            }
+
             auto tree = juce::ValueTree::fromXml (*xml);
 
             // Abhöre nicht aus dem Projekt übernehmen (nie versehentlich "roh" weiterarbeiten)
