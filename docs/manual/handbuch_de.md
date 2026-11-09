@@ -1,6 +1,6 @@
 # AME – Adaptive Mix Exchange
 
-**Handbuch · Version 0.14.0** · entwickelt von **Batze the bit builder**
+**Handbuch · Version 1.0.0** · entwickelt von **Batze the bit builder**
 
 *Every track finds its aim.* – Jede Spur bekommt ihren Platz.
 
@@ -257,7 +257,7 @@ Typischer Ablauf: Programm wählen → Song einige Male durchlaufen lassen → m
 
 ## Über AME
 
-**AME – Adaptive Mix Exchange**, Version 0.14.0
+**AME – Adaptive Mix Exchange**, Version 1.0.0
 
 Entwickelt von **Batze the bit builder**.
 

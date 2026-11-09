@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0 – 2026-11-09 (erstes Release)
+- Erste veröffentlichte Version, funktional identisch mit 0.14.0
+- Windows-Build (VST3, x64) automatisch per GitHub Actions bei Tag `v*`, ZIP mit Plugin, Handbuch, LICENSE und THIRD_PARTY_NOTICES als Release-Anhang
+
 ## 0.14.0 – 2026-11-09 (Abhöre Voll/Ohne Amt/Roh, Pegelangleich, Fix Exchange deaktiviert)
 - **Abhöre im Exchange** (ersetzt „Direkt (alle)“): **Voll** / **Ohne Amt** (nur manuelle Channelstrips, Engine aus) / **Roh** (alle Lines unbearbeitet – wie ohne Plugins); 30 ms Überblendung, Analyse läuft weiter; automatisierbar (Parameter „Monitor“), wird beim Laden immer auf Voll gesetzt
 - **Pegelangleich** für Roh: Exchange gleicht den Lautheitsunterschied zur bearbeiteten Fassung an seinem Ausgang aus (Leistung vor/nach jeder Line, ±12 dB, Anzeige in der Statuszeile)
