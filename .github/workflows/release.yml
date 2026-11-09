@@ -81,4 +81,4 @@ jobs:
           $notes = ".github/release-notes/$env:AME_TAG.md"
           $ghArgs = @("$env:AME_TAG", "$env:AME_ZIP", "--title", "AME $env:AME_TAG", "--target", "${{ github.sha }}")
           if (Test-Path $notes) { $ghArgs += @("--notes-file", $notes) } else { $ghArgs += "--generate-notes" }
-          gh release create @args
+          gh release create @ghArgs
