@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Manual
+    url: https://github.com/BatzeBitBuilder/AME-Adaptive-Mix-Exchange/blob/main/docs/manual/manual_en.md
+    about: Please check the manual (also built into the plug-in) before opening an issue.

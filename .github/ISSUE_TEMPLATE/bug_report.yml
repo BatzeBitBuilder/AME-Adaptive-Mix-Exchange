@@ -1,0 +1,43 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: AME version
+      description: Shown on the name plate in the plug-in (e.g. 1.0.1)
+    validations:
+      required: true
+  - type: input
+    id: daw
+    attributes:
+      label: DAW and version
+      placeholder: e.g. Ableton Live 12.1, Reaper 7.2
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Windows version
+      placeholder: e.g. Windows 11 24H2
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Load AME on …
+        2. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional information
+      description: Screenshots, number of Lines, whether an Exchange is used, plug-in sandboxing settings of your DAW

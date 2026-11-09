@@ -1,0 +1,10 @@
+build/
+build-*/
+out/
+.vs/
+*.user
+CMakeUserPresets.json
+
+# internal planning documents (kept locally, not published)
+KONZEPT.md
+BRANDING.md
