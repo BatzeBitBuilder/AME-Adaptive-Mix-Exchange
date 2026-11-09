@@ -91,6 +91,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     l.add (makeChoice (pid::genre, "Program", getGenreNames (Language::English), 0, false));
     l.add (makeFloat (pid::globalAmount, "Global Amount", { 0.0f, 100.0f }, 100.0f, "%"));
     l.add (makeBool (pid::globalBypass, "Direct (all)", false));
+    l.add (makeChoice (pid::monitor, "Monitor", { "Full", "No Engine", "Raw" }, 0, true));
+    l.add (makeBool (pid::levelMatch, "Level Match", true));
 
     // Input / Filter
     l.add (makeFloat (pid::inGain,  "Input",   { -24.0f, 24.0f, 0.01f }, 0.0f, "dB"));

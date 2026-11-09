@@ -93,10 +93,19 @@ void MultiTrackMixProcessor::timerCallback()
         hub->globalGenre.store (juce::roundToInt (param (pid::genre)));
         hub->globalAmount.store (param (pid::globalAmount) * 0.01f);
     }
-    engine->setActive (master);
+    // Engine nur, solange der Host das Exchange auch verarbeitet (deaktiviert/Bypass = wie "Ohne Amt")
+    const auto now = juce::Time::getMillisecondCounter();
+    const bool processing = ! hostBypassed.load() && lastAudioMs.load() != 0 && now - lastAudioMs.load() < 300;
+    exchangeSuspended.store (master && ! processing);
+    activeMasterFlag.store (master);
+    engine->setActive (master && processing);
 
     if (master)
-        hub->globalBypass.store (param (pid::globalBypass) > 0.5f);
+    {
+        const int mon = juce::roundToInt (param (pid::monitor));
+        hub->monitorMode.store (mon);
+        hub->globalBypass.store (mon == 1 || param (pid::globalBypass) > 0.5f);
+    }
 
     // Befehl "Alle einfrieren / lösen" vom Master
     const auto gen = hub->freezeCommandGen.load();
@@ -113,8 +122,12 @@ void MultiTrackMixProcessor::timerCallback()
         storeFrozenState();
 }
 
-void MultiTrackMixProcessor::prepareToPlay (double sampleRate, int)
+void MultiTrackMixProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    dryBuffer.setSize (2, juce::jmax (1, samplesPerBlock), false, true, false);
+    rawMix = 0.0f;
+    matchGain.reset (sampleRate, 0.05);
+    matchGain.setCurrentAndTargetValue (1.0f);
     strip.prepare (sampleRate, getTotalNumOutputChannels());
     analyzer.prepare (sampleRate);
     meterRms = meterPeak = 0.0f;
@@ -147,11 +160,26 @@ void MultiTrackMixProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
 
     auto* data = hub->getAudioData (slot);
     const int numSamples = buffer.getNumSamples();
+    lastAudioMs.store (juce::jmax (1u, juce::Time::getMillisecondCounter()), std::memory_order_relaxed);
+    hostBypassed.store (false, std::memory_order_relaxed);
 
     if (getMode() == InstanceMode::Track)
     {
         ChannelStrip::Params p;
         stripParams.read (p);
+
+        // Original für die Roh-Abhöre sichern
+        const int nch = juce::jmin (2, buffer.getNumChannels());
+        if (dryBuffer.getNumSamples() < numSamples)
+            dryBuffer.setSize (2, numSamples, false, true, true);
+        float dryPow = 0.0f;
+        for (int ch = 0; ch < nch; ++ch)
+        {
+            dryBuffer.copyFrom (ch, 0, buffer, ch, 0, numSamples);
+            const float* x = buffer.getReadPointer (ch);
+            for (int i = 0; i < numSamples; ++i)
+                dryPow += x[i] * x[i];
+        }
 
         strip.processPre (buffer, p);
 
@@ -246,11 +274,58 @@ void MultiTrackMixProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         }
 
         strip.processPost (buffer, p);
+
+        // Leistung bearbeitet / roh (Pegelangleich im Exchange), ~1 s geglättet
+        float wetPow = 0.0f;
+        for (int ch = 0; ch < nch; ++ch)
+        {
+            const float* x = buffer.getReadPointer (ch);
+            for (int i = 0; i < numSamples; ++i)
+                wetPow += x[i] * x[i];
+        }
+        const float norm = 1.0f / (float) juce::jmax (1, numSamples * nch);
+        const float pc = std::exp (-(float) numSamples / (float) getSampleRate());
+        dryPowS = pc * dryPowS + (1.0f - pc) * dryPow * norm;
+        wetPowS = pc * wetPowS + (1.0f - pc) * wetPow * norm;
+        if (data != nullptr)
+        {
+            data->dryPow.store (dryPowS, std::memory_order_relaxed);
+            data->wetPow.store (wetPowS, std::memory_order_relaxed);
+        }
+
+        // Roh-Abhöre des Exchange: auf das Original überblenden (30 ms)
+        const float rawTarget = hub->isRawMonitor() ? 1.0f : 0.0f;
+        if (rawTarget > 0.0f || rawMix > 0.0f)
+        {
+            const float step = 1.0f / (0.03f * (float) getSampleRate());
+            for (int i = 0; i < numSamples; ++i)
+            {
+                rawMix = rawTarget > rawMix ? juce::jmin (rawTarget, rawMix + step) : juce::jmax (rawTarget, rawMix - step);
+                for (int ch = 0; ch < nch; ++ch)
+                {
+                    auto* y = buffer.getWritePointer (ch);
+                    y[i] += rawMix * (dryBuffer.getSample (ch, i) - y[i]);
+                }
+            }
+        }
     }
     else
     {
-        // Master: Durchschleifen, nur Messung
+        // Master: Durchschleifen, Messung (vor dem Pegelangleich)
         analyzer.process (buffer, data);
+
+        // Roh-Abhöre: Lautheitsunterschied zur bearbeiteten Fassung am Ausgang ausgleichen
+        const bool raw = activeMasterFlag.load (std::memory_order_relaxed) && hub->isRawMonitor() && param (pid::levelMatch) > 0.5f;
+        matchGain.setTargetValue (raw ? juce::Decibels::decibelsToGain (hub->rawMatchDb.load (std::memory_order_relaxed)) : 1.0f);
+        if (matchGain.isSmoothing() || std::abs (matchGain.getTargetValue() - 1.0f) > 1.0e-4f)
+        {
+            for (int i = 0; i < numSamples; ++i)
+            {
+                const float g = matchGain.getNextValue();
+                for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+                    buffer.getWritePointer (ch)[i] *= g;
+            }
+        }
     }
 
     // Metering (Post-Fader)
@@ -291,6 +366,24 @@ void MultiTrackMixProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     data->blockCounter.fetch_add (1);
 }
 
+void MultiTrackMixProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
+{
+    // Host-Bypass: Exchange gilt als deaktiviert (Engine aus), Lines laufen ohne Eingriffe weiter
+    hostBypassed.store (true, std::memory_order_relaxed);
+    lastAudioMs.store (juce::jmax (1u, juce::Time::getMillisecondCounter()), std::memory_order_relaxed);
+    AudioProcessor::processBlockBypassed (buffer, midi);
+}
+
+void MultiTrackMixProcessor::setMonitor (int mode)
+{
+    if (auto* prm = apvts.getParameter (pid::monitor))
+    {
+        prm->beginChangeGesture();
+        prm->setValueNotifyingHost (prm->convertTo0to1 ((float) juce::jlimit (0, 2, mode)));
+        prm->endChangeGesture();
+    }
+}
+
 juce::AudioProcessorEditor* MultiTrackMixProcessor::createEditor()
 {
     return new MultiTrackMixEditor (*this);
@@ -307,7 +400,16 @@ void MultiTrackMixProcessor::setStateInformation (const void* data, int sizeInBy
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
         if (xml->hasTagName (apvts.state.getType()))
         {
-            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            auto tree = juce::ValueTree::fromXml (*xml);
+
+            // Abhöre nicht aus dem Projekt übernehmen (nie versehentlich "roh" weiterarbeiten)
+            for (auto child : tree)
+                if (child.hasType ("PARAM"))
+                    for (auto* id : { pid::monitor, pid::globalBypass })
+                        if (child.getProperty ("id").toString() == id)
+                            child.setProperty ("value", 0.0f, nullptr);
+
+            apvts.replaceState (tree);
             loadFrozenState();
         }
 }

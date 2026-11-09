@@ -53,7 +53,11 @@ private:
     juce::ComboBox modeBox, roleBox, genreBox;
     juce::Slider globalAmount { juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };
     juce::TextButton overviewButton;
-    juce::ToggleButton globalBypass;
+    juce::ToggleButton globalBypass;   // Altparameter, nicht mehr sichtbar (ersetzt durch die Abhöre)
+    juce::Label monitorLabel;
+    juce::TextButton monitorFull, monitorNoEngine, monitorRaw;
+    juce::ToggleButton levelMatch;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> levelMatchAtt;
     juce::TextButton freezeAllButton, releaseAllButton;
     juce::TextButton langDe { "DE" }, langEn { "EN" }, manualButton;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> globalBypassAtt;

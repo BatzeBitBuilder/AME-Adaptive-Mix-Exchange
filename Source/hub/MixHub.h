@@ -53,6 +53,7 @@ struct SlotAudioData
     std::atomic<float> peakDb { -100.0f };
     std::atomic<float> gainReductionDb { 0.0f };
     std::atomic<float> gateReductionDb { 0.0f }, deessReductionDb { 0.0f }, limiterReductionDb { 0.0f };
+    std::atomic<float> dryPow { 0.0f }, wetPow { 0.0f };   // Leistung Eingang / Ausgang (geglättet, für Pegelangleich)
     std::array<std::atomic<float>, kNumAnalysisBands> bandDb {};       // Kurzzeit-Spektrum (Anzeige, adaptiv)
     std::array<std::atomic<float>, kNumAnalysisBands> bandAvgDb {};    // Langzeit-Spektrum (~3 s, Masking)
     std::atomic<uint32_t> analysisCounter { 0 };
@@ -140,6 +141,8 @@ struct HubShared
     std::atomic<uint32_t> freezeCommandGen { 0 };
     std::atomic<bool>     freezeCommandValue { false };
     std::atomic<uint32_t> engineHeartbeatMs { 0 };
+    std::atomic<int>      monitorMode { 0 };     // Abhöre: 0 = Voll, 1 = Ohne Amt, 2 = Roh
+    std::atomic<float>    rawMatchDb { 0.0f };   // Summe bearbeitet minus roh (dB), von der Engine
 
     uint32_t nextInstanceId = 1;    // nur unter Hub-Sperre
     std::array<HubSlotInfo, kMaxSlots> infos {};
@@ -201,6 +204,11 @@ public:
 
     // Lebenszeichen der Engine (Millisekunden-Zähler, systemweit); veraltet = keine adaptiven Eingriffe
     std::atomic<uint32_t>& engineHeartbeatMs { shared.engineHeartbeatMs };
+
+    // Abhöre des Exchange (gilt nur, solange die Engine läuft) und Pegelunterschied roh/bearbeitet
+    std::atomic<int>&   monitorMode { shared.monitorMode };
+    std::atomic<float>& rawMatchDb  { shared.rawMatchDb };
+    bool isRawMonitor() const noexcept { return monitorMode.load (std::memory_order_relaxed) == 2 && isEngineAlive(); }
     bool isEngineAlive() const noexcept
     {
         const auto hb = engineHeartbeatMs.load (std::memory_order_relaxed);

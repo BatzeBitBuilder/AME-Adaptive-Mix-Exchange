@@ -1,6 +1,6 @@
 # AME – Adaptive Mix Exchange
 
-**Operating Manual · Version 0.13.0** · built by **Batze the bit builder**
+**Operating Manual · Version 0.14.0** · built by **Batze the bit builder**
 
 *Every track finds its aim.*
 
@@ -36,7 +36,7 @@ Live Sets saved with earlier versions keep loading: parameter IDs and the state 
 3. **Put one AME instance on the master bus** and set its mode to **Exchange (Master)**.
 4. In the Exchange, choose a **Program** (e.g. Rock / Band, Pop, Electronic).
 5. Start playback. After a few seconds the **ENGINE** lamp lights up and the Lines start making room for each other.
-6. Use **Direct (all)** in the Exchange to compare before/after. Happy with the result? Press **Hold (all)**.
+6. Compare with the **Monitor** in the Exchange: **Full** / **No Engine** / **Raw**. Happy with the result? Press **Hold (all)**.
 
 > Without an Exchange every Line runs "solo": the channel strip works normally, but there is no adaptive processing.
 
@@ -76,7 +76,7 @@ The header looks the same in Line and Exchange mode:
 - **MANUAL**: opens this manual. Click a chapter on the left; **CLOSE** returns to the plug-in.
 - **Mode**: Line (Track) or Exchange (Master).
 - **Line**: role selector, the detected role when Auto-ID is active, **Mix Overview** button.
-- **Exchange**: program, global amount, Direct (all), Hold (all), Release.
+- **Exchange**: program, global amount, monitor (Full / No Engine / Raw), level match, Hold (all), Release.
 
 > Parameter names in the DAW (automation) are always English – regardless of the selected language.
 
@@ -156,7 +156,13 @@ The Exchange passes audio through unchanged and shows the **Mix Overview**. On L
 
 - **Program** – genre profile for the whole mix (see chapter Programs).
 - **Amount** (global) – scales the processing of all Lines.
-- **Direct (all)** – A/B comparison for the whole mix.
+- **Monitor** – comparison for the whole mix:
+  - **Full** – everything active (channel strips + engine).
+  - **No Engine** – manual channel strips only, engine processing off (formerly "Direct (all)").
+  - **Raw** – all Lines output their unprocessed input, as if no plug-ins were loaded. Switching uses a 30 ms crossfade and analysis keeps running – switching back is instant.
+  - The monitor is automatable (parameter "Monitor", e.g. via MIDI map on a button) and is **not** saved with the project: it always loads as Full.
+- **Level match** – in Raw, compensates the loudness difference to the processed mix at the Exchange output (±12 dB, value shown in the status line), so the louder version does not simply sound "better". Based on the power before and after each Line (approximation, tracks treated as uncorrelated).
+- **Deactivating the Exchange** (device off or bypassed in the DAW) acts like **No Engine**: the engine stops and the Lines fade out their processing. The status line and the Lines show "Exchange deactivated".
 - **Hold (all) / Release** – switches Hold on all Lines.
 
 ### Mix Overview
@@ -219,11 +225,11 @@ The engine **only cuts** – it never boosts frequencies. Your manual EQ is neve
 
 ## Direct and Hold
 
-- **Direct** (Line) or **Direct (all)** (Exchange) switches off the adaptive processing only. The manual channel strip keeps working. Ideal for A/B comparisons – automatable.
+- **Direct** (Line) or the **No Engine** monitor (Exchange) switches off the adaptive processing only. The manual channel strip keeps working. Ideal for A/B comparisons – automatable. **Raw** (Exchange) also bypasses all channel strips.
 - **Hold** freezes the current adaptive values. They are saved with the Live Set and stay in effect even without an Exchange or with a different program.
 - **Hold (all) / Release** in the Exchange switches Hold on all Lines.
 
-Typical workflow: choose a program → let the song play a few times → compare with Direct → Hold (all) → remove the Exchange if you like.
+Typical workflow: choose a program → let the song play a few times → compare with the monitor → Hold (all) → remove the Exchange if you like.
 
 ## Workflow tips
 
@@ -251,7 +257,7 @@ Typical workflow: choose a program → let the song play a few times → compare
 
 ## About AME
 
-**AME – Adaptive Mix Exchange**, version 0.13.0
+**AME – Adaptive Mix Exchange**, version 0.14.0
 
 Built by **Batze the bit builder**.
 

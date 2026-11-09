@@ -1,6 +1,6 @@
 # AME (Adaptive Mix Exchange) – Konzept
 
-Stand: 2026-11-08 · Version 0.13.0 (Roadmap 1–4, 6a + Vintage-UI, AME, DE/EN, Handbuch, AGPLv3, Shared-Memory-Hub, vollständiger Channelstrip mit Presets)
+Stand: 2026-11-09 · Version 0.14.0 (Roadmap 1–4, 6a + Vintage-UI, AME, DE/EN, Handbuch, AGPLv3, Shared-Memory-Hub, vollständiger Channelstrip mit Presets)
 Entwickler: Batze the bit builder
 
 ## Ziel
@@ -25,7 +25,7 @@ VST3-Channelstrip, dessen Instanzen sich gegenseitig kennen. Anhand eines global
 | Presets | Werkspresets je Rolle (Klang-Module), „Preset der Rolle“ (Auto-Kennung), eigene Presets (%APPDATA%\AME\Presets), A/B im Projekt |
 | Fenster | frei skalierbar 50–200 % (Basis 1100 × 960), Größe global gespeichert |
 | Lautstärke | Rollen-Verhältnisse, Summenleistung bleibt konstant |
-| Kontrolle | A/B-Bypass (Spur/global), Einfrieren (Spur/alle, im Projekt gespeichert), EQ-Grafik |
+| Kontrolle | Direkt je Line; Abhöre im Exchange Voll / Ohne Amt / Roh mit Pegelangleich (nicht gespeichert); Exchange deaktiviert = Engine aus; Einfrieren (Spur/alle, im Projekt gespeichert), EQ-Grafik |
 | Reaktion | pro Spur stufenlos: langsam (Langzeit-Balance) … schnell (Ducking) |
 | Design | Vintage „Röhren-Gear“: Creme/Walnuss/Bakelit/Bernstein; Analyzer im Messgeräte-Stil (Phosphor); Schriften Abril Fatface, Bebas Neue, Courier Prime (OFL) |
 | Analyse-Anzeige | 240 Punkte (~1/12 Okt.), Regenbogen-/Spurfarben, Peak-Hold, Spektrogramm, Masking-Wärmesäulen + Matrix, Zeiger-VU |
@@ -68,10 +68,12 @@ Input → Phase → HPF/LPF → Gate/Expander → EQ ⇄ Kompressor → De-Esser
    ✅ Englische Oberfläche (umschaltbar) + Handbuch DE/EN (v0.8.0)
 5. Veröffentlichung auf GitHub: ✅ privates Repo (v0.8.0), ✅ Lizenz AGPLv3 (v0.8.1); offen: Repo öffentlich, Release-Build, ggf. GitHub Actions/Pages
 6. ✅ Shared-Memory-Hub prozessübergreifend (v0.9.0); offen: Feinschliff, Performance
+8. ✅ Abhöre Voll/Ohne Amt/Roh + Pegelangleich, Exchange-Deaktivierung stoppt Engine (v0.14.0)
 7. ✅ Vollständiger Channelstrip: Phase, Gate, De-Esser, Comp-Erweiterung, skalierbares Fenster (v0.10.0), Werkspresets je Rolle (v0.11.0), Sättigung/Exciter, EQ-Typen, Flanken, Reihenfolge (v0.12.0), Limiter/Clipper, eigene Presets, A/B (v0.13.0)
 
 ## Offene Punkte
 - v0.13.0 unter Windows gebaut und in Ableton erfolgreich getestet ✅
+- v0.14.0 (Abhöre, Pegelangleich, Fix Exchange deaktiviert) in Ableton testen
 - Werkspresets mit echtem Material feinjustieren; ggf. Oversampling für Sättigung/Clipper
 - Nächster Schritt: weitere Entwicklung; später Repo öffentlich + Release
 - Profilwerte weiter mit echtem Material feinjustieren

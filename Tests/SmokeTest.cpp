@@ -692,6 +692,94 @@ int main (int argc, char** argv)
     CHECK (kick->getHub().getNumInstances() == 4);
 
     testCrossProcessHub (kick->getHub(), [&] { runAll (2); juce::MessageManager::getInstance()->runDispatchLoopUntil (20); });
+
+    // --- Abhöre im Exchange: Roh, Pegelangleich, Host-Bypass, nicht im Projekt gespeichert ---
+    {
+        std::cout << "Abhöre:\n";
+        auto tick = [&] (int n) { for (int i = 0; i < n; ++i) { runAll (2); juce::MessageManager::getInstance()->runDispatchLoopUntil (20); } };
+        auto& hub = kick->getHub();
+        master->setMonitor (2);
+        tick (10);
+        CHECK (hub.isRawMonitor());
+
+        // Line gibt das Original aus
+        juce::AudioBuffer<float> buf (2, 512), in (2, 512);
+        for (int i = 0; i < 512; ++i)
+            for (int ch = 0; ch < 2; ++ch)
+                buf.setSample (ch, i, kickSig.next (48000.0) * (ch == 0 ? 1.0f : 0.9f));
+        in.makeCopyOf (buf);
+        juce::MidiBuffer midi;
+        kick->processBlock (buf, midi);
+        float maxDiff = 0.0f;
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < 512; ++i)
+                maxDiff = juce::jmax (maxDiff, std::abs (buf.getSample (ch, i) - in.getSample (ch, i)));
+        CHECK (maxDiff < 1.0e-6f);
+
+        // Exchange gleicht den Pegelunterschied aus
+        const float matchDb = hub.rawMatchDb.load();
+        juce::AudioBuffer<float> mb (2, 512);
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < 512; ++i)
+                mb.setSample (ch, i, 0.1f);
+        master->processBlock (mb, midi);
+        master->processBlock (mb, midi);   // Glättung (50 ms) abgeschlossen
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < 512; ++i)
+                mb.setSample (ch, i, 0.1f);
+        master->processBlock (mb, midi);
+        master->processBlock (mb, midi);
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < 512; ++i)
+                mb.setSample (ch, i, 0.1f);
+        master->processBlock (mb, midi);
+        const float gotDb = juce::Decibels::gainToDecibels (mb.getSample (0, 511) / 0.1f);
+        std::cout << "  Roh: Line = Original (max. Abw. " << maxDiff << "), Pegelangleich " << matchDb << " dB, Exchange-Ausgang " << gotDb << " dB\n";
+        CHECK (std::abs (matchDb) > 0.1f);
+        CHECK (std::abs (gotDb - matchDb) < 0.1f);
+
+        // Nicht im Projekt gespeichert
+        juce::MemoryBlock state;
+        master->getStateInformation (state);
+        MultiTrackMixProcessor restored;
+        restored.setStateInformation (state.getData(), (int) state.getSize());
+        CHECK (juce::roundToInt (restored.apvts.getRawParameterValue (pid::monitor)->load()) == 0);
+        CHECK (juce::roundToInt (master->apvts.getRawParameterValue (pid::monitor)->load()) == 2);
+
+        // Ohne Amt
+        master->setMonitor (1);
+        tick (5);
+        CHECK (! hub.isRawMonitor() && hub.globalBypass.load());
+        master->setMonitor (0);
+        tick (5);
+        CHECK (! hub.globalBypass.load());
+
+        // Host-Bypass bzw. keine Verarbeitung des Exchange → Engine aus
+        for (int i = 0; i < 25; ++i)
+        {
+            runBlocks (*kick, kickSig, 2);
+            juce::AudioBuffer<float> b2 (2, 512);
+            b2.clear();
+            master->processBlockBypassed (b2, midi);
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
+        }
+        CHECK (master->isExchangeSuspended());
+        CHECK (! master->isEngineRunning());
+        CHECK (! hub.isEngineAlive());
+        tick (10);
+        CHECK (! master->isExchangeSuspended() && master->isEngineRunning() && hub.isEngineAlive());
+
+        // Ableton "Gerät aus": Host ruft gar nichts mehr auf
+        for (int i = 0; i < 40; ++i)
+        {
+            runBlocks (*kick, kickSig, 2);
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
+        }
+        CHECK (master->isExchangeSuspended() && ! hub.isEngineAlive());
+        tick (10);
+        CHECK (hub.isEngineAlive());
+        std::cout << "  Host-Bypass / keine Verarbeitung: Engine aus und wieder an\n";
+    }
     CHECK (kick->getHub().getNumInstances() == 4);
 
     // UI-Snapshots

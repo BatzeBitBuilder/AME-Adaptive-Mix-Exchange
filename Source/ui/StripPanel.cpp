@@ -719,9 +719,12 @@ void StripPanel::paintAdaptive (juce::Graphics& g)
     auto status = area.removeFromTop (16.0f);
     juce::String st;
     juce::Colour sc = colours::phosphor;
-    if (bypassed)          { st = tr ("DIREKT – EINGRIFFE AUS", "DIRECT – PROCESSING OFF"); sc = colours::amberLamp; }
+    if (rawMonitor)        { st = tr ("ROH – AME UMGANGEN (ABHÖRE IM EXCHANGE)", "RAW – AME BYPASSED (EXCHANGE MONITOR)"); sc = colours::warn.brighter (0.4f); }
+    else if (noEngineMonitor) { st = tr ("OHNE AMT – ENGINE AUS (ABHÖRE)", "NO ENGINE – ENGINE OFF (MONITOR)"); sc = colours::amberLamp; }
+    else if (bypassed)     { st = tr ("DIREKT – EINGRIFFE AUS", "DIRECT – PROCESSING OFF"); sc = colours::amberLamp; }
     else if (frozen)       { st = tr ("HOLD – WERTE GEHALTEN", "HOLD – VALUES FROZEN");     sc = juce::Colour (0xff8fd0ff); }
     else if (engineAlive)  { st = tr ("EXCHANGE VERBUNDEN", "EXCHANGE CONNECTED"); }
+    else if (exchangePresent) { st = tr ("EXCHANGE DEAKTIVIERT – ENGINE AUS", "EXCHANGE DEACTIVATED – ENGINE OFF"); sc = colours::amberLamp; }
     else                   { st = tr ("NO EXCHANGE – LINE LÄUFT SOLO", "NO EXCHANGE – LINE RUNS SOLO"); sc = colours::amberLamp; }
     g.setFont (fonts::mono (12.0f, true));
     g.setColour (sc);
@@ -781,6 +784,8 @@ void StripPanel::refreshMeters()
         hpfHz = d->appliedHpfHz.load();
         gainDb = d->appliedGainDb.load();
         engineAlive = hub.isEngineAlive();
+        rawMonitor = hub.isRawMonitor();
+        noEngineMonitor = engineAlive && hub.monitorMode.load() == 1;
         frozen = d->frozen.load();
         bypassed = d->bypassed.load();
         eqGraph.refresh (dt);
@@ -802,6 +807,10 @@ void StripPanel::refreshMeters()
         // Typenschild (2 Hz genügt)
         if (++plateCounter % 15 == 0)
         {
+            exchangePresent = false;
+            for (const auto& t : hub.getSnapshot())
+                if (t.mode == InstanceMode::Master)
+                    exchangePresent = true;
             for (const auto& t : hub.getSnapshot())
                 if (t.slot == slot)
                 {

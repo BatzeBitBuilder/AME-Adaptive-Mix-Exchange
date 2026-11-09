@@ -56,8 +56,27 @@ MainView::MainView (MultiTrackMixProcessor& p)
     addAndMakeVisible (globalAmount);
     globalAmountAtt = std::make_unique<SliderAttachment> (p.apvts, pid::globalAmount, globalAmount);
 
-    addAndMakeVisible (globalBypass);
     globalBypassAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (p.apvts, pid::globalBypass, globalBypass);
+
+    // Abhöre: Voll / Ohne Amt / Roh
+    monitorLabel.setFont (mtm::ui::fonts::label (17.0f));
+    monitorLabel.setColour (juce::Label::textColourId, col::cream);
+    monitorLabel.setJustificationType (juce::Justification::centredRight);
+    addAndMakeVisible (monitorLabel);
+    int mi = 0;
+    for (auto* b : { &monitorFull, &monitorNoEngine, &monitorRaw })
+    {
+        b->setClickingTogglesState (false);
+        b->onClick = [this, mi] { proc.setMonitor (mi); };
+        addAndMakeVisible (*b);
+        ++mi;
+    }
+    monitorFull.setConnectedEdges (juce::Button::ConnectedOnRight);
+    monitorNoEngine.setConnectedEdges (juce::Button::ConnectedOnLeft | juce::Button::ConnectedOnRight);
+    monitorRaw.setConnectedEdges (juce::Button::ConnectedOnLeft);
+    levelMatch.setColour (juce::ToggleButton::textColourId, col::cream);
+    addAndMakeVisible (levelMatch);
+    levelMatchAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (p.apvts, pid::levelMatch, levelMatch);
     freezeAllButton.onClick  = [this] { proc.getHub().sendFreezeCommand (true); };
     releaseAllButton.onClick = [this] { proc.getHub().sendFreezeCommand (false); };
     addAndMakeVisible (freezeAllButton);
@@ -122,6 +141,17 @@ void MainView::updateTexts()
 
     overviewButton.setButtonText (tr ("Mix-Übersicht", "Mix Overview"));
     globalBypass.setButtonText (tr ("Direkt (alle)", "Direct (all)"));
+    monitorLabel.setText (tr ("Abhöre", "Monitor"), juce::dontSendNotification);
+    monitorFull.setButtonText (tr ("Voll", "Full"));
+    monitorNoEngine.setButtonText (tr ("Ohne Amt", "No Engine"));
+    monitorRaw.setButtonText (tr ("Roh", "Raw"));
+    levelMatch.setButtonText (tr ("Pegelangleich", "Level match"));
+    monitorFull.setTooltip (tr ("Alles aktiv: Channelstrips + Engine", "Everything active: channel strips + engine"));
+    monitorNoEngine.setTooltip (tr ("Nur die manuellen Channelstrips, Engine-Eingriffe aus", "Manual channel strips only, engine processing off"));
+    monitorRaw.setTooltip (tr ("Alle Lines unbearbeitet – wie ohne Plugins (wird nicht im Projekt gespeichert)",
+                               "All lines unprocessed – as without plug-ins (not saved with the project)"));
+    levelMatch.setTooltip (tr ("Roh: Lautheitsunterschied zur bearbeiteten Fassung am Exchange-Ausgang ausgleichen – fairer Vergleich",
+                               "Raw: compensate the loudness difference to the processed mix at the exchange output – fair comparison"));
     freezeAllButton.setButtonText (tr ("Hold (alle)", "Hold (all)"));
     releaseAllButton.setButtonText (tr ("Hold lösen", "Release"));
     manualButton.setButtonText (tr ("HANDBUCH", "MANUAL"));
@@ -166,7 +196,10 @@ void MainView::updateVisibility()
     genreBox.setVisible (master);
     globalAmountLabel.setVisible (master);
     globalAmount.setVisible (master);
-    globalBypass.setVisible (master);
+    globalBypass.setVisible (false);
+    for (juce::Component* c : { (juce::Component*) &monitorLabel, (juce::Component*) &monitorFull, (juce::Component*) &monitorNoEngine,
+                                (juce::Component*) &monitorRaw, (juce::Component*) &levelMatch })
+        c->setVisible (master);
     freezeAllButton.setVisible (master);
     releaseAllButton.setVisible (master);
 
@@ -232,9 +265,34 @@ void MainView::timerCallback()
         status << MTM_TXT ("  ·  ") << masters << tr (" Exchanges – nur das älteste ist aktiv", " exchanges – only the oldest is active");
         c = col::amberLamp;
     }
+    else if (! hub.isEngineAlive())
+    {
+        status << tr ("  ·  Exchange deaktiviert – Engine aus", "  ·  Exchange deactivated – engine off");
+        c = col::amberLamp;
+    }
+    else if (hub.isRawMonitor())
+    {
+        status << tr ("  ·  Abhöre ROH – alle Lines unbearbeitet", "  ·  Monitor RAW – all lines unprocessed");
+        if (mode == InstanceMode::Master && proc.apvts.getRawParameterValue (pid::levelMatch)->load() > 0.5f)
+            status << tr ("  ·  Pegelangleich ", "  ·  level match ") << juce::String (hub.rawMatchDb.load(), 1) << " dB";
+        c = juce::Colour (0xffff7a5c);
+    }
+    else if (hub.monitorMode.load() == 1)
+    {
+        status << tr ("  ·  Abhöre OHNE AMT – Engine-Eingriffe aus", "  ·  Monitor NO ENGINE – engine processing off");
+        c = col::amberLamp;
+    }
     else if (mode == InstanceMode::Master)
     {
         status << tr ("  ·  Exchange aktiv", "  ·  Exchange active");
+    }
+
+    // Abhöre-Tasten folgen dem Parameter (auch bei Automation / MIDI)
+    {
+        const int mon = juce::roundToInt (proc.apvts.getRawParameterValue (pid::monitor)->load());
+        monitorFull.setToggleState (mon == 0, juce::dontSendNotification);
+        monitorNoEngine.setToggleState (mon == 1, juce::dontSendNotification);
+        monitorRaw.setToggleState (mon == 2, juce::dontSendNotification);
     }
 
     statusLabel.setText (status, juce::dontSendNotification);
@@ -338,7 +396,7 @@ void MainView::resized()
         line1.removeFromRight (6);
         freezeAllButton.setBounds (line1.removeFromRight (100).reduced (0, 1));
         line1.removeFromRight (10);
-        globalBypass.setBounds (line1.removeFromRight (124));
+        levelMatch.setBounds (line1.removeFromRight (128));
         line1.removeFromRight (8);
     }
     statusLabel.setBounds (line1);
@@ -370,7 +428,13 @@ void MainView::resized()
         r.removeFromLeft (16);
         globalAmountLabel.setBounds (r.removeFromLeft (60));
         r.removeFromLeft (6);
-        globalAmount.setBounds (r.removeFromLeft (220));
+        globalAmount.setBounds (r.removeFromLeft (160));
+
+        monitorRaw.setBounds (r.removeFromRight (58).reduced (0, 1));
+        monitorNoEngine.setBounds (r.removeFromRight (86).reduced (0, 1));
+        monitorFull.setBounds (r.removeFromRight (58).reduced (0, 1));
+        r.removeFromRight (6);
+        monitorLabel.setBounds (r.removeFromRight (64));
     }
 
     strip.setBounds (area);

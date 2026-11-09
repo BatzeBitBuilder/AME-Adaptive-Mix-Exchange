@@ -25,6 +25,8 @@ inline constexpr const char* adaptFreeze = "adaptFreeze";   // aktuelle Werte fe
 inline constexpr const char* genre        = "genre";
 inline constexpr const char* globalAmount = "globalAmount";
 inline constexpr const char* globalBypass = "globalBypass";
+inline constexpr const char* monitor      = "monitor";       // 0 = Voll, 1 = Ohne Amt (Engine aus), 2 = Roh
+inline constexpr const char* levelMatch   = "levelMatch";
 
 // Strip
 inline constexpr const char* inGain   = "inGain";

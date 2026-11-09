@@ -28,6 +28,7 @@ Aussprache: englisch „aim“ → **Every track finds its aim.** (Ziel = Preset
 | Rolle „Auto“ | Auto-Kennung | Auto-ID |
 | Einfrieren | Hold | Hold (Release = lösen) |
 | Bypass | Direkt | Direct |
+| Gesamtvergleich (Exchange) | Abhöre: Voll / Ohne Amt / Roh | Monitor: Full / No Engine / Raw |
 | Reaktion | Ansprechzeit | Response |
 | Instanz verbunden | Lampe „LINE“ | Lampe „LINE“ |
 | kein Master | „No Exchange – Line läuft solo“ | „No Exchange – line runs solo“ |

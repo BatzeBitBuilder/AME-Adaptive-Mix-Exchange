@@ -135,7 +135,7 @@ private:
 
     std::array<float, kNumAdaptiveBands> cutDb {};
     float hpfHz = 0.0f, gainDb = 0.0f;
-    bool engineAlive = false, frozen = false, bypassed = false;
+    bool engineAlive = false, frozen = false, bypassed = false, rawMonitor = false, noEngineMonitor = false, exchangePresent = false;
 
     VuMeter levelVu { {}, VuMeter::Mode::Level };
     VuMeter grVu { {}, VuMeter::Mode::GainReduction };

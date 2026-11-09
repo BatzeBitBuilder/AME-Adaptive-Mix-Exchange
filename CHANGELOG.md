@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.14.0 – 2026-11-09 (Abhöre Voll/Ohne Amt/Roh, Pegelangleich, Fix Exchange deaktiviert)
+- **Abhöre im Exchange** (ersetzt „Direkt (alle)“): **Voll** / **Ohne Amt** (nur manuelle Channelstrips, Engine aus) / **Roh** (alle Lines unbearbeitet – wie ohne Plugins); 30 ms Überblendung, Analyse läuft weiter; automatisierbar (Parameter „Monitor“), wird beim Laden immer auf Voll gesetzt
+- **Pegelangleich** für Roh: Exchange gleicht den Lautheitsunterschied zur bearbeiteten Fassung an seinem Ausgang aus (Leistung vor/nach jeder Line, ±12 dB, Anzeige in der Statuszeile)
+- **Fix**: Exchange in der DAW deaktiviert bzw. Host-Bypass → Engine stoppt (wirkt wie „Ohne Amt“); bisher rechnete die Engine weiter. Erkennung über Audio-Lebenszeichen (300 ms) und `processBlockBypassed`; Lines zeigen „Exchange deaktiviert“
+- Lines stoppen Engine-Eingriffe sofort beim Anhalten der Engine (Lebenszeichen wird gelöscht)
+- Statuszeile und Line-Anzeige zeigen Roh / Ohne Amt / Exchange deaktiviert
+- Hub-Layout v3 (Abhöre, Pegelangleich, Leistungen je Line)
+- Handbuch DE/EN: Exchange-Kapitel, Direkt und Hold, Schnellstart
+- Smoke-Test: Roh = Original (bit-genau), Pegelangleich am Exchange-Ausgang, Abhöre nicht gespeichert, Host-Bypass und fehlende Verarbeitung stoppen die Engine
+
 ## 0.13.0 – 2026-11-08 (Limiter/Clipper, eigene Presets, A/B)
 - **Limiter / Clipper** (neues Rack-Modul, hinter dem Output-Gain): Limiter ohne Latenz (sofortiger Eingriff, Release), Soft Clip, Hard Clip; Ceiling −12…0 dB, kein Sample darüber; Reduktionsanzeige
 - **Eigene Presets**: Speichern/Laden/Löschen in der Preset-Leiste, Ablage `%APPDATA%\AME\Presets\*.amepreset` (XML, Klarwerte, Versionsangabe), für alle Projekte; umfassen alle Strip-Einstellungen inkl. Input, Phase, Output und Limiter

@@ -1,6 +1,6 @@
 # AME – Adaptive Mix Exchange
 
-**Handbuch · Version 0.13.0** · entwickelt von **Batze the bit builder**
+**Handbuch · Version 0.14.0** · entwickelt von **Batze the bit builder**
 
 *Every track finds its aim.* – Jede Spur bekommt ihren Platz.
 
@@ -36,7 +36,7 @@ Bestehende Live-Sets mit früheren Versionen laden weiter: Parameter-IDs und Spe
 3. **Eine AME-Instanz auf den Master-Bus** legen und den Modus auf **Exchange (Master)** stellen.
 4. Im Exchange das **Programm** wählen (z. B. Rock / Band, Pop, Electronic).
 5. Wiedergabe starten. Nach wenigen Sekunden leuchtet die Lampe **ENGINE**, die Lines weichen sich gegenseitig aus.
-6. Mit **Direkt (alle)** im Exchange vorher/nachher vergleichen. Gefällt das Ergebnis: **Hold (alle)**.
+6. Mit der **Abhöre** im Exchange vergleichen: **Voll** / **Ohne Amt** / **Roh**. Gefällt das Ergebnis: **Hold (alle)**.
 
 > Ohne Exchange laufen alle Lines „solo": Der Channelstrip funktioniert normal, es gibt aber keine adaptiven Eingriffe.
 
@@ -76,7 +76,7 @@ Die Kopfzeile ist in Line und Exchange gleich aufgebaut:
 - **HANDBUCH**: öffnet dieses Handbuch. Kapitel links anklicken, **SCHLIESSEN** kehrt zurück.
 - **Modus**: Line (Spur) oder Exchange (Master).
 - **Line**: Rollenauswahl, bei Auto-Kennung die erkannte Rolle, Schalter **Mix-Übersicht**.
-- **Exchange**: Programm, globaler Amount, Direkt (alle), Hold (alle), Hold lösen.
+- **Exchange**: Programm, globaler Amount, Abhöre (Voll / Ohne Amt / Roh), Pegelangleich, Hold (alle), Hold lösen.
 
 > Parameter-Namen in der DAW (Automation) sind immer englisch – unabhängig von der gewählten Sprache.
 
@@ -156,7 +156,13 @@ Das Exchange schleift das Audiosignal unverändert durch und zeigt die **Mix-Üb
 
 - **Programm** – Genre-Profil für den ganzen Mix (siehe Kapitel Programme).
 - **Amount** (global) – skaliert die Eingriffe aller Lines.
-- **Direkt (alle)** – A/B-Vergleich für den gesamten Mix.
+- **Abhöre** – Vergleich für den gesamten Mix:
+  - **Voll** – alles aktiv (Channelstrips + Engine).
+  - **Ohne Amt** – nur die manuellen Channelstrips, die Engine-Eingriffe sind aus (früher „Direkt (alle)“).
+  - **Roh** – alle Lines geben ihr unbearbeitetes Eingangssignal aus, als wären keine Plugins geladen. Umschalten mit 30 ms Überblendung, die Analyse läuft weiter – beim Zurückschalten ist sofort alles wieder da.
+  - Die Abhöre ist automatisierbar (Parameter „Monitor“, z. B. per MIDI Map auf einen Taster) und wird **nicht** im Projekt gespeichert: Beim Laden steht sie immer auf Voll.
+- **Pegelangleich** – gleicht in der Stellung Roh den Lautheitsunterschied zur bearbeiteten Fassung am Exchange-Ausgang aus (±12 dB, Wert in der Statuszeile). So klingt nicht einfach die lautere Variante „besser“. Grundlage: Leistung vor und nach jeder Line (Näherung, Spuren als unkorreliert betrachtet).
+- **Exchange deaktivieren** (Gerät in der DAW aus bzw. Bypass) wirkt wie **Ohne Amt**: Die Engine stoppt, die Lines blenden ihre Eingriffe aus. Statuszeile und Lines zeigen „Exchange deaktiviert“.
 - **Hold (alle) / Hold lösen** – schaltet Hold auf allen Lines.
 
 ### Mix-Übersicht
@@ -219,11 +225,11 @@ Die Engine **senkt nur ab** – sie hebt keine Frequenzen an. Dein manueller EQ 
 
 ## Direkt und Hold
 
-- **Direkt** (Line) bzw. **Direkt (alle)** (Exchange) schaltet nur die adaptiven Eingriffe aus. Der manuelle Channelstrip läuft weiter. Ideal für A/B-Vergleiche – automatisierbar.
+- **Direkt** (Line) bzw. die Abhöre **Ohne Amt** (Exchange) schaltet nur die adaptiven Eingriffe aus. Der manuelle Channelstrip läuft weiter. Ideal für A/B-Vergleiche – automatisierbar. **Roh** (Exchange) umgeht zusätzlich alle Channelstrips.
 - **Hold** friert die aktuellen adaptiven Werte ein. Sie werden im Live-Set gespeichert und gelten auch ohne Exchange oder bei anderem Programm.
 - **Hold (alle) / Hold lösen** im Exchange schaltet Hold auf allen Lines.
 
-Typischer Ablauf: Programm wählen → Song einige Male durchlaufen lassen → mit Direkt vergleichen → Hold (alle) → Exchange bei Bedarf entfernen.
+Typischer Ablauf: Programm wählen → Song einige Male durchlaufen lassen → mit der Abhöre vergleichen → Hold (alle) → Exchange bei Bedarf entfernen.
 
 ## Tipps für den Workflow
 
@@ -251,7 +257,7 @@ Typischer Ablauf: Programm wählen → Song einige Male durchlaufen lassen → m
 
 ## Über AME
 
-**AME – Adaptive Mix Exchange**, Version 0.13.0
+**AME – Adaptive Mix Exchange**, Version 0.14.0
 
 Entwickelt von **Batze the bit builder**.
 

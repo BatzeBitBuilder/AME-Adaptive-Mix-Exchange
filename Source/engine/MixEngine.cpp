@@ -32,7 +32,10 @@ void MixEngine::setActive (bool shouldBeActive)
     if (shouldBeActive && ! isTimerRunning())
         startTimer (kIntervalMs);
     else if (! shouldBeActive && isTimerRunning())
+    {
         stopTimer();
+        hub.engineHeartbeatMs.store (0);   // Lines sofort ohne Engine (nicht erst nach Ablauf des Lebenszeichens)
+    }
 }
 
 void MixEngine::step()
@@ -200,6 +203,20 @@ void MixEngine::step()
 
         // Lautstärke
         d->targetGainDb.store (gains[(size_t) ti], std::memory_order_relaxed);
+    }
+
+    // Pegelangleich für die Roh-Abhöre: Summenleistung bearbeitet / unbearbeitet (Spuren als unkorreliert genähert)
+    {
+        double dry = 0.0, wet = 0.0;
+        for (const auto& s : tracks)
+            if (s.mode == InstanceMode::Track)
+                if (auto* d = hub.getAudioData (s.slot))
+                {
+                    dry += d->dryPow.load (std::memory_order_relaxed);
+                    wet += d->wetPow.load (std::memory_order_relaxed);
+                }
+        const float db = (dry > 1.0e-9 && wet > 1.0e-9) ? (float) (10.0 * std::log10 (wet / dry)) : 0.0f;
+        hub.rawMatchDb.store (juce::jlimit (-12.0f, 12.0f, db), std::memory_order_relaxed);
     }
 
     hub.engineHeartbeatMs.store (juce::jmax (1u, juce::Time::getMillisecondCounter()), std::memory_order_relaxed);

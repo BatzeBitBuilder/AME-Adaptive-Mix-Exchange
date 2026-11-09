@@ -25,6 +25,7 @@ public:
     void releaseResources() override {}
     bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    void processBlockBypassed (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
@@ -54,6 +55,9 @@ public:
     mtm::InstanceMode getMode() const noexcept;
     bool isActiveMaster() const;
     bool isEngineRunning() const { return engine != nullptr && engine->isActive(); }
+    // Exchange ist Master, wird vom Host aber nicht verarbeitet (deaktiviert / Bypass)
+    bool isExchangeSuspended() const noexcept { return exchangeSuspended.load(); }
+    void setMonitor (int mode);   // Abhöre 0/1/2 (Message-Thread, mit Geste)
     juce::String getTrackName() const;
     mtm::RoleGuess getAutoRole() const { return autoGuess; }   // nur Message-Thread
 
@@ -93,6 +97,15 @@ private:
     juce::Colour trackColour { juce::Colours::transparentBlack };   // transparent = Palette im UI
 
     float meterRms = 0.0f;   // Mittelwert der Quadrate, geglättet
+
+    // Exchange: Audio-Lebenszeichen, Host-Bypass
+    std::atomic<uint32_t> lastAudioMs { 0 };
+    std::atomic<bool> hostBypassed { false }, exchangeSuspended { false }, activeMasterFlag { false };
+
+    // Roh-Abhöre (Line): unbearbeitetes Signal, Überblendung, Leistungen
+    juce::AudioBuffer<float> dryBuffer;
+    float rawMix = 0.0f, dryPowS = 0.0f, wetPowS = 0.0f;
+    juce::SmoothedValue<float> matchGain { 1.0f };   // Exchange: Pegelangleich
     float meterPeak = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MultiTrackMixProcessor)
