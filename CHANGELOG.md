@@ -4,6 +4,8 @@
 - **Landscape window**: base size 1400 × 760 instead of 1100 × 960 – fits 1080p screens, also with 125 % Windows scaling; still scalable 50–200 % with a fixed aspect ratio
 - Line: ADAPTIVE moved next to the EQ (vertical column), status and applied values on two lines; VU meters and type plate more compact
 - Exchange: patchbay, VU left/right and spectrogram in a right-hand column; line list and analyser on the left
+- **Window size menu** in the header (50–200 %), usable even when the resize corner is off-screen
+- **Fit to screen**: if the window is larger than the work area of the monitor it is on (e.g. size chosen on an ultrawide, then moved to a 1080p screen), it shrinks automatically – also after moving; this automatic size is not stored
 - **Folding sections** (triangle): Line – ADAPTIVE and spectrogram; Exchange – line list and DETAILS column. The freed space goes to the EQ or analyser; state is global and remembered (user settings)
 - Smoke test: folded screenshots, aspect ratio and stored fold state
 

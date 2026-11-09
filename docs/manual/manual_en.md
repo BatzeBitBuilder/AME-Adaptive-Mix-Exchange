@@ -157,7 +157,7 @@ The LED display at the bottom shows the current cut per octave band (31 Hz–16 
 - **Name plate**: version, Line number, track name (from the DAW), role and active program.
 
 ### Window size and folding sections
-The window uses a landscape layout (base 1400 × 760), so it also fits full-HD screens (1080p, even with 125 % Windows scaling). Drag the bottom-right corner to scale it freely from 50 to 200 %. The last size chosen applies to all AME windows.
+The window uses a landscape layout (base 1400 × 760), so it also fits full-HD screens (1080p, even with 125 % Windows scaling). Drag the bottom-right corner to scale it freely from 50 to 200 %, or use the percentage button in the header (next to MANUAL). The last size chosen applies to all AME windows. If the window is larger than the monitor it is on (e.g. size chosen on an ultrawide, then moved to a 1080p monitor), AME shrinks it automatically.
 
 Foldable (triangle down = open, right = folded): on a Line **ADAPTIVE** and the **spectrogram**, on the Exchange the **line list** and the right-hand **DETAILS** column (patchbay, VU, spectrogram). The space goes to the EQ or analyser. The state applies to all AME windows and is remembered.
 

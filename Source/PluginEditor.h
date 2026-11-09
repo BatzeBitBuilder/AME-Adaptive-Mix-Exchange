@@ -31,6 +31,10 @@ public:
     ame::ui::HandbookView& getHandbook() { return handbook; }
     ame::ui::StripPanel& getStrip() { return strip; }
 
+    // Größenwahl im Kopf (wirkt über den Editor)
+    std::function<void (float)> onScaleChosen;
+    void setScaleDisplay (float s);
+
 private:
     using ComboAttachment  = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
@@ -62,7 +66,8 @@ private:
     juce::Label learnBarLabel, learnStatus;                 // Exchange: Mitschnitt aller Lines
     juce::TextButton learnRecAll, learnPlayAll, learnLiveAll, learnClearAll;
     juce::Rectangle<int> learnBar;
-    juce::TextButton langDe { "DE" }, langEn { "EN" }, manualButton;
+    juce::TextButton langDe { "DE" }, langEn { "EN" }, manualButton, zoomButton;
+    float shownScale = 1.0f;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> globalBypassAtt;
 
     std::unique_ptr<ComboAttachment> modeAtt, roleAtt, genreAtt;
@@ -79,7 +84,8 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainView)
 };
 
-class AmeEditor : public juce::AudioProcessorEditor
+class AmeEditor : public juce::AudioProcessorEditor,
+                  private juce::Timer
 {
 public:
     explicit AmeEditor (AmeProcessor&);
@@ -92,10 +98,15 @@ public:
     ame::ui::HandbookView& getHandbook()       { return view.getHandbook(); }
     ame::ui::StripPanel& getStrip()            { return view.getStrip(); }
     float getScale() const noexcept            { return scale; }
+    void setUiScale (float s);                 // 0.5 … 2.0, wird gespeichert
+    void fitToScreen();                        // verkleinert, falls größer als die Arbeitsfläche des Monitors
 
 private:
+    void timerCallback() override { fitToScreen(); }
+
     MainView view;
     float scale = 1.0f;
+    bool autoFitting = false;   // automatische Verkleinerung nicht als Nutzerwahl speichern
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmeEditor)
 };

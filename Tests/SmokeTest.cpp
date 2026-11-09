@@ -956,6 +956,13 @@ int main (int argc, char** argv)
         std::unique_ptr<juce::AudioProcessorEditor> edT (vocal->createEditor());
         std::unique_ptr<juce::AudioProcessorEditor> edM (master->createEditor());
         CHECK (edT->getWidth() * 760 == edT->getHeight() * 1400);   // Querformat, Seitenverhältnis fest
+        if (auto* ame = dynamic_cast<AmeEditor*> (edT.get()))
+        {
+            ame->setUiScale (0.75f);   // Größenwahl im Kopf
+            CHECK (ame->getWidth() == 1050 && ame->getHeight() == 570);
+            CHECK (ame::settings::get ("uiScale").getFloatValue() == 0.75f);
+            ame->setUiScale (1.0f);
+        }
         for (int f = 0; f < 40; ++f) { runAll (3); juce::MessageManager::getInstance()->runDispatchLoopUntil (33); }
         snapshot (*edT, outDir.getChildFile ("ui_track_folded.png"));
         snapshot (*edM, outDir.getChildFile ("ui_master_folded.png"));

@@ -157,7 +157,7 @@ Die LED-Anzeige unten zeigt die aktuelle Absenkung je Oktavband (31 Hz–16 kHz,
 - **Typenschild**: Version, Line-Nummer, Spurname (aus der DAW), Rolle und aktives Programm.
 
 ### Fenstergröße und Klappbereiche
-Das Fenster ist im Querformat angelegt (Basis 1400 × 760) und passt damit auch auf Full-HD-Bildschirme (1080p, auch mit 125 % Windows-Skalierung). An der Ecke unten rechts lässt es sich stufenlos von 50 bis 200 % skalieren. Die zuletzt gewählte Größe gilt für alle AME-Fenster.
+Das Fenster ist im Querformat angelegt (Basis 1400 × 760) und passt damit auch auf Full-HD-Bildschirme (1080p, auch mit 125 % Windows-Skalierung). An der Ecke unten rechts lässt es sich stufenlos von 50 bis 200 % skalieren, alternativ über die Prozent-Taste im Kopf (neben HANDBUCH). Die zuletzt gewählte Größe gilt für alle AME-Fenster. Ist das Fenster größer als der Monitor, auf dem es liegt (z. B. Größe auf einem Ultrawide gewählt, dann auf einen 1080p-Monitor geschoben), verkleinert AME es automatisch.
 
 Einklappbar (Dreieck nach unten = offen, nach rechts = eingeklappt): an der Line **ADAPTIV** und das **Spektrogramm**, im Exchange die **Line-Liste** und die rechte Spalte **DETAILS** (Patchfeld, VU, Spektrogramm). Der Platz geht an EQ bzw. Analyzer. Der Zustand gilt für alle AME-Fenster und wird gespeichert.
 

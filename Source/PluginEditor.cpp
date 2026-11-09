@@ -124,6 +124,24 @@ MainView::MainView (AmeProcessor& p)
     manualButton.onClick = [this] { showHandbook (manualButton.getToggleState()); };
     addAndMakeVisible (manualButton);
 
+    // Fenstergröße per Menü (funktioniert auch, wenn die Zieh-Ecke außerhalb des Bildschirms liegt)
+    zoomButton.onClick = [this]
+    {
+        juce::PopupMenu m;
+        m.addSectionHeader (tr ("Fenstergröße", "Window size"));
+        const int steps[] { 50, 60, 70, 80, 90, 100, 110, 125, 150, 175, 200 };
+        const int cur = juce::roundToInt (shownScale * 100.0f);
+        for (int pc : steps)
+            m.addItem (pc, juce::String (pc) + " %", true, std::abs (pc - cur) <= 2);
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&zoomButton),
+                         [safe = juce::Component::SafePointer<MainView> (this)] (int r)
+                         {
+                             if (safe != nullptr && r > 0 && safe->onScaleChosen)
+                                 safe->onScaleChosen ((float) r / 100.0f);
+                         });
+    };
+    addAndMakeVisible (zoomButton);
+
     addChildComponent (strip);
     addChildComponent (overview);
     addChildComponent (handbook);
@@ -195,6 +213,8 @@ void MainView::updateTexts()
     releaseAllButton.setButtonText (tr ("Hold lösen", "Release"));
     manualButton.setButtonText (tr ("HANDBUCH", "MANUAL"));
     manualButton.setTooltip (tr ("Handbuch öffnen", "Open the manual"));
+    zoomButton.setTooltip (tr ("Fenstergröße wählen (gilt für alle AME-Fenster)", "Choose the window size (applies to all AME windows)"));
+    setScaleDisplay (shownScale);
 
     const bool en = i18n::isEnglish();
     langDe.setToggleState (! en, juce::dontSendNotification);
@@ -207,6 +227,12 @@ void MainView::updateTexts()
     handbook.loadForCurrentLanguage();
     frame = 2;   // Statuszeile beim nächsten Tick neu
     repaint();
+}
+
+void MainView::setScaleDisplay (float s)
+{
+    shownScale = s;
+    zoomButton.setButtonText (juce::String (juce::roundToInt (s * 100.0f)) + " %");
 }
 
 void MainView::languageChanged()
@@ -465,6 +491,8 @@ void MainView::resized()
         auto r = line1;
         manualButton.setBounds (r.removeFromRight (84).reduced (0, 1));
         r.removeFromRight (6);
+        zoomButton.setBounds (r.removeFromRight (62).reduced (0, 1));
+        r.removeFromRight (6);
         langEn.setBounds (r.removeFromRight (32).reduced (0, 1));
         langDe.setBounds (r.removeFromRight (32).reduced (0, 1));
         r.removeFromRight (12);
@@ -609,9 +637,42 @@ AmeEditor::AmeEditor (AmeProcessor& p)
     if (auto* c = getConstrainer())
         c->setFixedAspectRatio ((double) w / (double) h);
 
+    view.onScaleChosen = [this] (float s) { setUiScale (s); };
+
     const float stored = ame::settings::get ("uiScale", "0.9").getFloatValue();
     const float s = juce::jlimit (0.5f, 2.0f, stored > 0.0f ? stored : 0.9f);
     setSize (juce::roundToInt ((float) w * s), juce::roundToInt ((float) h * s));
+
+    // Monitor prüfen (beim Öffnen und nach dem Verschieben auf einen kleineren Bildschirm)
+    startTimer (500);
+}
+
+void AmeEditor::setUiScale (float s)
+{
+    s = juce::jlimit (0.5f, 2.0f, s);
+    setSize (juce::roundToInt ((float) MainView::baseWidth * s), juce::roundToInt ((float) MainView::baseHeight * s));
+    ame::settings::set ("uiScale", juce::String (s, 3));
+}
+
+void AmeEditor::fitToScreen()
+{
+    if (! isShowing())
+        return;
+    const auto screen = getScreenBounds();
+    const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect (screen);
+    if (display == nullptr)
+        return;
+
+    // Platz für Titelleiste/Rahmen des Host-Fensters lassen
+    const auto area = display->userArea;
+    const float maxW = (float) area.getWidth() - 16.0f, maxH = (float) area.getHeight() - 64.0f;
+    if ((float) getWidth() <= maxW + 1.0f && (float) getHeight() <= maxH + 1.0f)
+        return;
+
+    const float fit = std::floor (juce::jmax (0.5f, juce::jmin (maxW / (float) MainView::baseWidth,
+                                                                maxH / (float) MainView::baseHeight)) * 100.0f) / 100.0f;
+    const juce::ScopedValueSetter<bool> svs (autoFitting, true);
+    setSize (juce::roundToInt ((float) MainView::baseWidth * fit), juce::roundToInt ((float) MainView::baseHeight * fit));
 }
 
 AmeEditor::~AmeEditor() = default;
@@ -621,11 +682,12 @@ void AmeEditor::resized()
     const float s = (float) getWidth() / (float) MainView::baseWidth;
     view.setBounds (0, 0, MainView::baseWidth, MainView::baseHeight);
     view.setTransform (juce::AffineTransform::scale (s));
+    view.setScaleDisplay (s);
 
     if (std::abs (s - scale) > 0.005f)
     {
         scale = s;
-        if (isShowing())   // nur Änderungen durch den Nutzer merken
+        if (isShowing() && ! autoFitting)   // nur Änderungen durch den Nutzer merken
             ame::settings::set ("uiScale", juce::String (s, 3));
     }
 }
