@@ -12,13 +12,14 @@
 #include "EqGraph.h"
 #include "VuMeter.h"
 #include "Waterfall.h"
+#include "FoldButton.h"
 
 namespace ame::ui
 {
 // Bedienoberfläche des Channelstrips (Spur-Modus)
-//   oben:   INPUT | FILTER | Modul-Rack (Reiter: Gate, Kompressor, De-Esser …)   | rechts: VU, Typenschild, OUTPUT
-//   Mitte:  EQ mit Analyzer + Spektrogramm
-//   unten:  ADAPTIV
+//   oben:   Preset-Leiste, INPUT | FILTER | Modul-Rack (Reiter: Gate, Kompressor, De-Esser …)
+//   unten:  EQ mit Analyzer + Spektrogramm (einklappbar) | ADAPTIV (einklappbar)
+//   rechts: VU, Typenschild, OUTPUT
 class StripPanel : public juce::Component
 {
 public:
@@ -93,6 +94,7 @@ private:
     void updatePresetButtons();
     void askSavePreset();
     void askDeletePreset();
+    void applyFolds();   // Sichtbarkeit nach Klappzustand
 
     juce::AudioProcessorValueTreeState& apvts;
     MixHub& hub;
@@ -137,6 +139,7 @@ private:
     juce::ComboBox priorityBox;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> priorityAtt;
     juce::Rectangle<int> adaptiveDisplay;
+    FoldButton adaptiveFold { "foldLineAdaptive" }, spectroFold { "foldLineSpectrogram" };
 
     std::array<float, kNumAdaptiveBands> cutDb {};
     float hpfHz = 0.0f, gainDb = 0.0f;

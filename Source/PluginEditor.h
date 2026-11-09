@@ -18,7 +18,7 @@ class MainView : public juce::Component,
                  private ame::i18n::Listener
 {
 public:
-    static constexpr int baseWidth = 1100, baseHeight = 960;
+    static constexpr int baseWidth = 1400, baseHeight = 760;   // Querformat, passt auch bei 1080p mit 125 % Windows-Skalierung
 
     explicit MainView (AmeProcessor&);
     ~MainView() override;

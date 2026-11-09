@@ -36,6 +36,11 @@ MixOverview::MixOverview (MixHub& h) : hub (h)
     waterfall.setRange (-90.0f, -20.0f);
     peakDb.fill (-100.0f);
     matrix.onSelect = [this] (uint32_t id) { selectedId = id; repaint(); };
+    for (auto* f : { &listFold, &detailsFold })
+    {
+        f->onFoldChanged = [this] { resized(); repaint(); };
+        addAndMakeVisible (*f);
+    }
     updateTexts();
 }
 
@@ -43,6 +48,9 @@ void MixOverview::updateTexts()
 {
     vuLeft.setCaption (tr ("Links", "Left"));
     vuRight.setCaption (tr ("Rechts", "Right"));
+    listFold.setTooltip (tr ("Line-Liste ein-/ausklappen", "Show/hide the line list"));
+    detailsFold.setLabel ("DETAILS");
+    detailsFold.setTooltip (tr ("Rechte Spalte ein-/ausklappen (Analyzer wird breiter)", "Show/hide the right column (the analyzer gets wider)"));
     repaint();
 }
 
@@ -130,21 +138,35 @@ void MixOverview::resized()
 {
     auto area = getLocalBounds().reduced (8);
 
-    // oben: Liste (volle Breite)
-    const int wantedH = headH + juce::jmax (4, (int) tracks.size()) * rowH + 16;
-    listArea = area.removeFromTop (juce::jlimit (128, 230, wantedH));
-    area.removeFromTop (8);
+    // rechts: Patchfeld, VU L/R, Spektrogramm (eingeklappt: schmale Leiste)
+    const bool detailsFolded = detailsFold.isFolded();
+    detailsArea = area.removeFromRight (detailsFolded ? 30 : 330);
+    area.removeFromRight (8);
+    for (juce::Component* c : { (juce::Component*) &matrix, (juce::Component*) &vuLeft, (juce::Component*) &vuRight, (juce::Component*) &waterfall })
+        c->setVisible (! detailsFolded);
+    if (detailsFolded)
+    {
+        detailsFold.setBounds (detailsArea.reduced (4, 6).removeFromTop (22));
+    }
+    else
+    {
+        auto d = detailsArea;
+        detailsFold.setBounds (d.removeFromTop (22).withTrimmedLeft (4).withWidth (detailsFold.getIdealWidth()));
+        d.removeFromTop (4);
+        matrix.setBounds (d.removeFromTop (juce::jmin (282, d.getHeight() / 2)));
+        d.removeFromTop (8);
+        auto vuRow = d.removeFromTop (116);
+        vuLeft.setBounds (vuRow.removeFromLeft (vuRow.getWidth() / 2).withTrimmedRight (4));
+        vuRight.setBounds (vuRow.withTrimmedLeft (4));
+        d.removeFromTop (8);
+        waterfall.setBounds (d);
+    }
 
-    // unten: Spektrogramm | VU L/R | Matrix
-    auto bottom = area.removeFromBottom (juce::jmin (220, area.getHeight() / 2));
-    area.removeFromBottom (8);
-    matrix.setBounds (bottom.removeFromRight (290));
-    bottom.removeFromRight (8);
-    auto vuCol = bottom.removeFromRight (150);
-    bottom.removeFromRight (8);
-    vuLeft.setBounds (vuCol.removeFromTop (vuCol.getHeight() / 2).withTrimmedBottom (3));
-    vuRight.setBounds (vuCol.withTrimmedTop (3));
-    waterfall.setBounds (bottom);
+    // links oben: Liste (eingeklappt: nur Kopfzeile)
+    const int wantedH = headH + juce::jmax (4, (int) tracks.size()) * rowH + 16;
+    listArea = area.removeFromTop (listFold.isFolded() ? headH + 12 : juce::jlimit (128, 230, wantedH));
+    listFold.setBounds (listArea.getRight() - 32, listArea.getY() + 6, 22, headH);
+    area.removeFromTop (8);
 
     spectrumArea = area;
 }
@@ -167,6 +189,8 @@ void MixOverview::paint (juce::Graphics& g)
 {
     paintList (g, listArea);
     paintSpectrum (g, spectrumArea);
+    if (detailsFold.isFolded())
+        drawFoldedColumn (g, detailsArea.toFloat(), tr ("PATCHFELD · PEGEL · SPEKTROGRAMM", "PATCHBAY · LEVEL · SPECTROGRAM"));
 }
 
 void MixOverview::paintList (juce::Graphics& g, juce::Rectangle<int> area)
@@ -206,6 +230,9 @@ void MixOverview::paintList (juce::Graphics& g, juce::Rectangle<int> area)
         g.drawText (tr ("ÜBERDECKT VON", "MASKED BY"), c.info, juce::Justification::centredLeft);
         g.drawText (tr ("ADAPTIV", "ADAPTIVE"), c.adapt, juce::Justification::centredLeft);
     }
+    if (listFold.isFolded())
+        return;
+
     g.setColour (colours::engrave);
     g.drawHorizontalLine (area.getY(), (float) area.getX(), (float) area.getRight());
 

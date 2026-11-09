@@ -1,6 +1,6 @@
 # AME – Adaptive Mix Exchange
 
-**Handbuch · Version 1.0.2** · entwickelt von **Batze the bit builder**
+**Handbuch · Version 1.1.0** · entwickelt von **Batze the bit builder**
 
 *Every track finds its aim.* – Jede Spur bekommt ihren Platz.
 
@@ -133,7 +133,7 @@ Die Grafik zeigt:
 - **EQ**-Kurve (creme, inkl. Filter) mit ziehbaren Punkten L, 1, 2, H, HP, LP,
 - **Engine**-Kurve gestrichelt (bernstein).
 
-Bedienung: Punkt **ziehen** = Frequenz/Gain, **Mausrad** = Q, **Doppelklick** = 0 dB. Darunter läuft das **Spektrogramm**.
+Bedienung: Punkt **ziehen** = Frequenz/Gain, **Mausrad** = Q, **Doppelklick** = 0 dB. Darunter läuft das **Spektrogramm**; der Klappschalter (Dreieck) **SPEKTROGRAMM** im EQ-Titel blendet es aus (die Grafik wird höher).
 
 ### Output
 In der rechten Spalte: **Pan**, **Width** (0–200 %, 100 % = unverändert, 0 % = Mono) und **Gain** (±24 dB).
@@ -147,15 +147,19 @@ In der rechten Spalte: **Pan**, **Width** (0–200 %, 100 % = unverändert, 0 % 
 - **Hold** – aktuelle Werte festhalten.
 - **Mitschnitt** – **Live** (Engine regelt laufend), **Aufnahme** (angewendete Werte über die Songposition aufzeichnen) oder **Wiedergabe** (Aufzeichnung exakt abspielen). Siehe Kapitel „Export und Mitschnitt“.
 
-Die LED-Anzeige rechts zeigt die aktuelle Absenkung je Oktavband (31 Hz–16 kHz, bis −9 dB Skala), dazu adaptiven Hochpass und Lautstärkekorrektur sowie den Status (EXCHANGE VERBUNDEN, NO EXCHANGE, DIREKT, HOLD, AUFNAHME LÄUFT, WIEDERGABE MITSCHNITT, EXPORT OHNE EXCHANGE).
+Der Bereich ADAPTIV sitzt rechts neben dem EQ. Mit dem Klappschalter (Dreieck) oben rechts lässt er sich zu einer schmalen Leiste einklappen – der EQ wird dann breiter.
+
+Die LED-Anzeige unten zeigt die aktuelle Absenkung je Oktavband (31 Hz–16 kHz, bis −9 dB Skala), dazu adaptiven Hochpass und Lautstärkekorrektur sowie den Status (EXCHANGE VERBUNDEN, NO EXCHANGE, DIREKT, HOLD, AUFNAHME LÄUFT, WIEDERGABE MITSCHNITT, EXPORT OHNE EXCHANGE).
 
 ### VU-Meter und Typenschild
 - **Ausgang**: VU-Ballistik (0 VU = −18 dBFS RMS), Peak-Lampe ab −1 dBFS.
 - **Kompressor**: Gain Reduction 0 bis −20 dB.
 - **Typenschild**: Version, Line-Nummer, Spurname (aus der DAW), Rolle und aktives Programm.
 
-### Fenstergröße
-Das Fenster lässt sich an der Ecke unten rechts stufenlos von 50 bis 200 % skalieren. Die zuletzt gewählte Größe gilt für alle AME-Fenster.
+### Fenstergröße und Klappbereiche
+Das Fenster ist im Querformat angelegt (Basis 1400 × 760) und passt damit auch auf Full-HD-Bildschirme (1080p, auch mit 125 % Windows-Skalierung). An der Ecke unten rechts lässt es sich stufenlos von 50 bis 200 % skalieren. Die zuletzt gewählte Größe gilt für alle AME-Fenster.
+
+Einklappbar (Dreieck nach unten = offen, nach rechts = eingeklappt): an der Line **ADAPTIV** und das **Spektrogramm**, im Exchange die **Line-Liste** und die rechte Spalte **DETAILS** (Patchfeld, VU, Spektrogramm). Der Platz geht an EQ bzw. Analyzer. Der Zustand gilt für alle AME-Fenster und wird gespeichert.
 
 ## Das Exchange (Master)
 
@@ -191,6 +195,8 @@ Die Tabelle listet alle Lines:
 **Zeile anklicken** wählt eine Spur aus: Der Analyzer zeigt dann ihre Überdeckung als Wärmesäulen (gelb → rot), ihr Spektrum vor der Engine gestrichelt, den Peak gepunktet und ihr Spektrogramm.
 
 ### Analyzer, Patchfeld, VU
+Links Line-Liste und Analyzer, rechts die Spalte **DETAILS** mit Patchfeld, VU Links/Rechts und dem Spektrogramm der ausgewählten Spur. Liste und DETAILS lassen sich einklappen (Dreieck), der Analyzer nutzt dann den Platz.
+
 - **Analyzer**: alle Spuren als farbige Flächen, die **Summe** als Creme-Linie; ohne Auswahl zeigen die Wärmesäulen die Gesamtbelegung je Frequenz.
 - **Patchfeld**: Matrix aller Lines – Zeile wird von Spalte verdeckt. Je heller, desto stärker. Klick wählt die Spur.
 - **VU Links/Rechts**: Summenpegel.
@@ -302,7 +308,7 @@ Typischer Ablauf: Programm wählen → Song einige Male durchlaufen lassen → m
 
 ## Über AME
 
-**AME – Adaptive Mix Exchange**, Version 1.0.2
+**AME – Adaptive Mix Exchange**, Version 1.1.0
 
 Entwickelt von **Batze the bit builder**.
 

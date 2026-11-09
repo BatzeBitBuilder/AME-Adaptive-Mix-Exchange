@@ -161,9 +161,29 @@ StripPanel::StripPanel (juce::AudioProcessorValueTreeState& state, MixHub& h, in
     for (auto* b : { &saveButton, &deleteButton, &abA, &abB, &abCopy })
         addAndMakeVisible (*b);
 
+    // Klappbereiche: ADAPTIV (Spalte), Spektrogramm (im EQ)
+    for (auto* f : { &adaptiveFold, &spectroFold })
+    {
+        f->onFoldChanged = [this] { applyFolds(); resized(); repaint(); };
+        addAndMakeVisible (*f);
+    }
+
     const int savedTab = (int) apvts.state.getProperty (rackTabId, (int) Module::Compressor);
     showModule ((Module) juce::jlimit (0, (int) modules.size() - 1, savedTab));
+    applyFolds();
     updateTexts();
+}
+
+void StripPanel::applyFolds()
+{
+    const bool showAdaptive = ! adaptiveFold.isFolded();
+    for (auto* k : adaptive.knobs) { k->slider.setVisible (showAdaptive); k->label.setVisible (showAdaptive); }
+    for (auto* t : { aEqToggle, aHpfToggle, aGainToggle, aBypassToggle, aFreezeToggle })
+        t->button.setVisible (showAdaptive);
+    learnChoice->box.setVisible (showAdaptive);
+    for (juce::Component* c : { (juce::Component*) &learnLabel, (juce::Component*) &priorityLabel, (juce::Component*) &priorityBox })
+        c->setVisible (showAdaptive);
+    waterfall.setVisible (! spectroFold.isFolded());
 }
 
 void StripPanel::updateTexts()
@@ -237,6 +257,9 @@ void StripPanel::updateTexts()
     levelVu.setCaption (tr ("Ausgang", "Output"));
     grVu.setCaption (tr ("Kompressor", "Compressor"));
     waterfall.setCaption (tr ("SPEKTROGRAMM", "SPECTROGRAM"));
+    spectroFold.setLabel (tr ("SPEKTROGRAMM", "SPECTROGRAM"));
+    spectroFold.setTooltip (tr ("Spektrogramm ein-/ausklappen", "Show/hide the spectrogram"));
+    adaptiveFold.setTooltip (tr ("ADAPTIV ein-/ausklappen (EQ wird breiter)", "Show/hide ADAPTIVE (the EQ gets wider)"));
     plateCounter = 14;   // Typenschild beim nächsten Meter-Update neu
     if (! getLocalBounds().isEmpty())
         resized();       // Breiten der Schalter folgen dem Text
@@ -503,25 +526,27 @@ void StripPanel::layoutRack (juce::Rectangle<int> r)
 
 void StripPanel::resized()
 {
+    // Querformat (Basis 1400 × 760): rechte Spalte VU/Typenschild/OUTPUT, links Presets, INPUT | FILTER | Rack,
+    // darunter EQ | ADAPTIV nebeneinander
     auto area = getLocalBounds().reduced (8);
     constexpr int gap = 6;
 
     // Rechte Spalte: VU-Meter, Typenschild, OUTPUT
     auto meterCol = area.removeFromRight (176);
     area.removeFromRight (8);
-    levelVu.setBounds (meterCol.removeFromTop (128));
+    levelVu.setBounds (meterCol.removeFromTop (108));
+    meterCol.removeFromTop (6);
+    grVu.setBounds (meterCol.removeFromTop (108));
     meterCol.removeFromTop (8);
-    grVu.setBounds (meterCol.removeFromTop (128));
-    meterCol.removeFromTop (10);
-    plateArea = meterCol.removeFromTop (150);
+    plateArea = meterCol.removeFromTop (146);
     meterCol.removeFromTop (gap);
     {
         output.bounds = meterCol;
         auto inner = meterCol.reduced (6);
         inner.removeFromTop (22);
-        const int h = juce::jmin (130, inner.getHeight() / 2);
+        const int h = juce::jmin (120, inner.getHeight() / 2);
         layoutKnobRow ({ output.knobs[0], output.knobs[1] }, inner.removeFromTop (h));
-        inner.removeFromTop (6);
+        inner.removeFromTop (4);
         layoutKnobRow ({ output.knobs[2] }, inner.removeFromTop (h).withSizeKeepingCentre (88, h));
         outputSpare = inner;
     }
@@ -531,9 +556,9 @@ void StripPanel::resized()
     {
         auto r = presetBar.reduced (8, 4);
         presetLabel.setBounds (r.removeFromLeft (62));
-        presetBox.setBounds (r.removeFromLeft (230));
+        presetBox.setBounds (r.removeFromLeft (260));
         r.removeFromLeft (8);
-        fromRoleButton.setBounds (r.removeFromLeft (226));
+        fromRoleButton.setBounds (r.removeFromLeft (240));
         r.removeFromLeft (8);
         saveButton.setBounds (r.removeFromLeft (84));
         r.removeFromLeft (4);
@@ -546,11 +571,7 @@ void StripPanel::resized()
     }
     area.removeFromTop (gap);
 
-    // Unten: Adaptiv
-    auto row3 = area.removeFromBottom (150);
-    area.removeFromBottom (gap);
-
-    // Oben: INPUT | FILTER | Rack
+    // INPUT | FILTER | Rack
     auto row1 = area.removeFromTop (204);
     area.removeFromTop (gap);
 
@@ -580,62 +601,86 @@ void StripPanel::resized()
     row1.removeFromLeft (gap);
     layoutRack (row1);
 
-    // EQ: Analyzer, Spektrogramm, Regler
+    // ADAPTIV: Spalte rechts neben dem EQ (eingeklappt: schmale Leiste)
+    const bool adaptiveFolded = adaptiveFold.isFolded();
+    auto adaptCol = area.removeFromRight (adaptiveFolded ? 30 : 340);
+    area.removeFromRight (gap);
+    adaptive.bounds = adaptCol;
+    adaptiveDisplay = {};
+    if (adaptiveFolded)
+    {
+        adaptiveFold.setBounds (adaptCol.reduced (4, 6).removeFromTop (22));
+    }
+    else
+    {
+        auto inner = adaptCol.reduced (6);
+        auto title = inner.removeFromTop (22);
+        adaptiveFold.setBounds (title.removeFromRight (22));
+        inner.removeFromTop (2);
+
+        auto r1 = inner.removeFromTop (24);
+        r1.removeFromLeft (4);
+        aEqToggle->button.setBounds (r1.removeFromLeft (56));
+        aHpfToggle->button.setBounds (r1.removeFromLeft (62));
+        aGainToggle->button.setBounds (r1.removeFromLeft (70));
+        aFreezeToggle->button.setBounds (r1.removeFromLeft (80));
+        inner.removeFromTop (2);
+        auto r2 = inner.removeFromTop (24);
+        r2.removeFromLeft (4);
+        aBypassToggle->button.setBounds (r2.removeFromLeft (104));
+        learnChoice->box.setBounds (r2.removeFromRight (124).reduced (0, 1));
+        r2.removeFromRight (6);
+        learnLabel.setBounds (r2);
+        inner.removeFromTop (4);
+
+        auto r3 = inner.removeFromTop (104);
+        layoutKnobRow (adaptive.knobs, r3.removeFromLeft (166));
+        r3.removeFromLeft (10);
+        auto prio = r3.withSizeKeepingCentre (r3.getWidth(), 48);
+        priorityLabel.setBounds (prio.removeFromTop (18));
+        priorityBox.setBounds (prio.removeFromTop (26));
+
+        inner.removeFromTop (8);
+        adaptiveDisplay = inner.reduced (3, 3);
+    }
+
+    // EQ: Analyzer, Spektrogramm (einklappbar), Regler
     {
         eq.bounds = area;
         auto inner = area.reduced (6);
         auto t = inner.removeFromTop (22);
-        highType->box.setBounds (t.removeFromRight (104).reduced (0, 1));
+        t.removeFromLeft (40);   // Titel "EQ"
+        spectroFold.setBounds (t.removeFromLeft (spectroFold.getIdealWidth()));
+        highType->box.setBounds (t.removeFromRight (100).reduced (0, 1));
         highTypeLabel.setBounds (t.removeFromRight (44));
-        t.removeFromRight (10);
-        lowType->box.setBounds (t.removeFromRight (104).reduced (0, 1));
+        t.removeFromRight (8);
+        lowType->box.setBounds (t.removeFromRight (100).reduced (0, 1));
         lowTypeLabel.setBounds (t.removeFromRight (40));
-        t.removeFromRight (16);
-        order->box.setBounds (t.removeFromRight (136).reduced (0, 1));
+        t.removeFromRight (12);
+        order->box.setBounds (t.removeFromRight (132).reduced (0, 1));
         orderLabel.setBounds (t.removeFromRight (90));
         inner.removeFromTop (2);
-        auto knobRow = inner.removeFromBottom (122);
+        auto knobRow = inner.removeFromBottom (112);
         inner.removeFromBottom (4);
-        auto wf = inner.removeFromBottom (58);
-        inner.removeFromBottom (4);
+        if (! spectroFold.isFolded())
+        {
+            auto wf = inner.removeFromBottom (56);
+            inner.removeFromBottom (4);
+            waterfall.setBounds (wf.withTrimmedLeft (24));   // an Analyzer-Achse ausrichten
+        }
         eqGraph.setBounds (inner);
-        waterfall.setBounds (wf.withTrimmedLeft (24));   // an Analyzer-Achse ausrichten
         layoutKnobRow (eq.knobs, knobRow);
     }
-
-    // Adaptiv
-    adaptive.bounds = row3;
-    auto inner = row3.reduced (6);
-    auto title = inner.removeFromTop (22);
-    title.removeFromLeft (84);
-    aEqToggle->button.setBounds (title.removeFromLeft (52));
-    aHpfToggle->button.setBounds (title.removeFromLeft (58));
-    aGainToggle->button.setBounds (title.removeFromLeft (64));
-    title.removeFromLeft (16);
-    aBypassToggle->button.setBounds (title.removeFromLeft (104));
-    aFreezeToggle->button.setBounds (title.removeFromLeft (104));
-    title.removeFromLeft (8);
-    learnLabel.setBounds (title.removeFromLeft (86));
-    title.removeFromLeft (6);
-    learnChoice->box.setBounds (title.removeFromLeft (128));
-
-    auto knobArea = inner.removeFromLeft (160);
-    layoutKnobRow (adaptive.knobs, knobArea);
-
-    inner.removeFromLeft (10);
-    auto prioArea = inner.removeFromLeft (150);
-    prioArea.removeFromTop (8);
-    priorityLabel.setBounds (prioArea.removeFromTop (18));
-    priorityBox.setBounds (prioArea.removeFromTop (26));
-
-    inner.removeFromLeft (16);
-    adaptiveDisplay = inner.reduced (0, 2);
 }
 
 void StripPanel::paint (juce::Graphics& g)
 {
-    for (auto* s : { &input, &filter, &eq, &output, &adaptive })
+    for (auto* s : { &input, &filter, &eq, &output })
         drawEngravedPanel (g, s->bounds.toFloat(), s->title);
+    if (adaptiveFold.isFolded())
+        drawFoldedColumn (g, adaptive.bounds.toFloat(), adaptive.title);
+    else
+        drawEngravedPanel (g, adaptive.bounds.toFloat(), adaptive.title);
     drawEngravedPanel (g, presetBar.toFloat(), {});
 
     paintRack (g);
@@ -758,13 +803,14 @@ void StripPanel::paintAdaptive (juce::Graphics& g)
     else                   { st = tr ("NO EXCHANGE – LINE LÄUFT SOLO", "NO EXCHANGE – LINE RUNS SOLO"); sc = colours::amberLamp; }
     g.setFont (fonts::mono (12.0f, true));
     g.setColour (sc);
-    g.drawText (st, status, juce::Justification::centredLeft);
+    g.drawFittedText (st, status.toNearestInt(), juce::Justification::centredLeft, 1, 0.75f);
+    status = area.removeFromTop (15.0f);   // zweite Zeile: angewendete Werte
 
     juce::String info;
     info << "HPF " << (hpfHz >= 20.0f ? juce::String (juce::roundToInt (hpfHz)) + " Hz" : tr ("AUS", "OFF"))
          << "   GAIN " << (gainDb >= 0.0f ? "+" : "") << juce::String (gainDb, 1) << " dB";
     g.setColour (colours::phosphor);
-    g.drawText (info, status, juce::Justification::centredRight);
+    g.drawText (info, status, juce::Justification::centredLeft);
 
     area.removeFromTop (4.0f);
     auto labels = area.removeFromBottom (13.0f);

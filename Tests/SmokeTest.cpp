@@ -948,6 +948,23 @@ int main (int argc, char** argv)
         for (int f = 0; f < 120; ++f) { runAll (3); juce::MessageManager::getInstance()->runDispatchLoopUntil (33); }
         snapshot (*ed, outDir.getChildFile ("ui_master.png"));
     }
+    {
+        // Einklappbare Bereiche: Zustand global gespeichert, gilt für neu geöffnete Fenster
+        std::cout << "Klappbereiche:\n";
+        for (auto* k : { "foldLineAdaptive", "foldLineSpectrogram", "foldExList", "foldExDetails" })
+            ame::settings::set (k, "1");
+        std::unique_ptr<juce::AudioProcessorEditor> edT (vocal->createEditor());
+        std::unique_ptr<juce::AudioProcessorEditor> edM (master->createEditor());
+        CHECK (edT->getWidth() * 760 == edT->getHeight() * 1400);   // Querformat, Seitenverhältnis fest
+        for (int f = 0; f < 40; ++f) { runAll (3); juce::MessageManager::getInstance()->runDispatchLoopUntil (33); }
+        snapshot (*edT, outDir.getChildFile ("ui_track_folded.png"));
+        snapshot (*edM, outDir.getChildFile ("ui_master_folded.png"));
+        for (auto* k : { "foldLineAdaptive", "foldLineSpectrogram", "foldExList", "foldExDetails" })
+        {
+            CHECK (ame::settings::get (k) == "1");
+            ame::settings::set (k, "0");
+        }
+    }
 
     // Sprache, Parameter-Namen, Handbuch
     {

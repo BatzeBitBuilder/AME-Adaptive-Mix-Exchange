@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0 – 2026-11-09 (landscape layout, folding sections)
+- **Landscape window**: base size 1400 × 760 instead of 1100 × 960 – fits 1080p screens, also with 125 % Windows scaling; still scalable 50–200 % with a fixed aspect ratio
+- Line: ADAPTIVE moved next to the EQ (vertical column), status and applied values on two lines; VU meters and type plate more compact
+- Exchange: patchbay, VU left/right and spectrogram in a right-hand column; line list and analyser on the left
+- **Folding sections** (triangle): Line – ADAPTIVE and spectrogram; Exchange – line list and DETAILS column. The freed space goes to the EQ or analyser; state is global and remembered (user settings)
+- Smoke test: folded screenshots, aspect ratio and stored fold state
+
 ## 1.0.2 – 2026-11-09 (export = monitor: audio-clocked engine, recording)
 - **Engine on the audio clock**: the Exchange computes one engine step per 20 ms of audio in its audio thread (previously a 50 Hz wall-clock timer). Offline exports – faster or slower than real time – now behave like playback. The engine step is real-time safe (no locks, no allocations; registry copy per slot in the hub)
 - **Recording** (new, per Line: Live / Record / Playback, parameter “Recording”, not automatable): captures the applied adaptive values (10 cuts, high-pass, level) along the DAW song position at 50 frames/s and replays them exactly – independent of engine, Exchange and render speed, also for single-track (stem) exports. Saved compressed with the project (up to 30 min); gaps up to 10 s are bridged

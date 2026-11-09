@@ -11,13 +11,14 @@
 #include "VuMeter.h"
 #include "Waterfall.h"
 #include "MaskingMatrix.h"
+#include "FoldButton.h"
 
 namespace ame::ui
 {
 // Mix-Übersicht im Vintage-Stil:
-//  oben:  Spurliste (Rolle, Pegel, Maskierung, Hauptüberdeckung, Adaptiv) + VU L/R der eigenen Instanz
-//  Mitte: Phosphor-Analyzer aller Spuren (Spurfarben, Masking-Wärmesäulen, Peak-Hold der Auswahl)
-//  unten: Spektrogramm der Auswahl + Masking-Matrix
+//  links oben:   Spurliste (Rolle, Pegel, Maskierung, Hauptüberdeckung, Adaptiv) – einklappbar
+//  links unten:  Phosphor-Analyzer aller Spuren (Spurfarben, Masking-Wärmesäulen, Peak-Hold der Auswahl)
+//  rechts:       Patchfeld (Masking-Matrix), VU L/R der eigenen Instanz, Spektrogramm der Auswahl – einklappbar
 // Klick auf Zeile / Matrixzeile wählt eine Spur aus.
 class MixOverview : public juce::Component
 {
@@ -50,7 +51,8 @@ private:
     Waterfall waterfall;
     MaskingMatrix matrix;
 
-    juce::Rectangle<int> listArea, spectrumArea;
+    juce::Rectangle<int> listArea, spectrumArea, detailsArea;
+    FoldButton listFold { "foldExList" }, detailsFold { "foldExDetails" };
     static constexpr int rowH = 22, headH = 22;
 };
 } // namespace ame::ui

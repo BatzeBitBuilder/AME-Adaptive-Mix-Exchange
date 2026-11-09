@@ -1,6 +1,6 @@
 # AME – Adaptive Mix Exchange
 
-**Operating Manual · Version 1.0.2** · built by **Batze the bit builder**
+**Operating Manual · Version 1.1.0** · built by **Batze the bit builder**
 
 *Every track finds its aim.*
 
@@ -133,7 +133,7 @@ The display shows:
 - the **EQ** curve (cream, incl. filters) with draggable points L, 1, 2, H, HP, LP,
 - the **Engine** curve dashed (amber).
 
-Handling: **drag** a point = frequency/gain, **mouse wheel** = Q, **double-click** = 0 dB. The **spectrogram** runs underneath.
+Handling: **drag** a point = frequency/gain, **mouse wheel** = Q, **double-click** = 0 dB. The **spectrogram** runs underneath; the fold switch (triangle) **SPECTROGRAM** in the EQ title hides it (the graph gets taller).
 
 ### Output
 In the right-hand column: **Pan**, **Width** (0–200 %, 100 % = unchanged, 0 % = mono) and **Gain** (±24 dB).
@@ -147,15 +147,19 @@ In the right-hand column: **Pan**, **Width** (0–200 %, 100 % = unchanged, 0 % 
 - **Hold** – freeze the current values.
 - **Recording** – **Live** (engine adapts continuously), **Record** (capture the applied values along the song position) or **Playback** (replay the capture exactly). See chapter "Export and recording".
 
-The LED display on the right shows the current cut per octave band (31 Hz–16 kHz, scale down to −9 dB), the adaptive high-pass and level correction, and the status (EXCHANGE CONNECTED, NO EXCHANGE, DIRECT, HOLD, RECORDING, PLAYBACK RECORDING, EXPORT WITHOUT EXCHANGE).
+The ADAPTIVE section sits to the right of the EQ. The fold switch (triangle) at its top right collapses it to a narrow strip – the EQ then gets wider.
+
+The LED display at the bottom shows the current cut per octave band (31 Hz–16 kHz, scale down to −9 dB), the adaptive high-pass and level correction, and the status (EXCHANGE CONNECTED, NO EXCHANGE, DIRECT, HOLD, RECORDING, PLAYBACK RECORDING, EXPORT WITHOUT EXCHANGE).
 
 ### VU meters and name plate
 - **Output**: VU ballistics (0 VU = −18 dBFS RMS), peak lamp from −1 dBFS.
 - **Compressor**: gain reduction 0 to −20 dB.
 - **Name plate**: version, Line number, track name (from the DAW), role and active program.
 
-### Window size
-Drag the bottom-right corner to scale the window freely from 50 to 200 %. The last size chosen applies to all AME windows.
+### Window size and folding sections
+The window uses a landscape layout (base 1400 × 760), so it also fits full-HD screens (1080p, even with 125 % Windows scaling). Drag the bottom-right corner to scale it freely from 50 to 200 %. The last size chosen applies to all AME windows.
+
+Foldable (triangle down = open, right = folded): on a Line **ADAPTIVE** and the **spectrogram**, on the Exchange the **line list** and the right-hand **DETAILS** column (patchbay, VU, spectrogram). The space goes to the EQ or analyser. The state applies to all AME windows and is remembered.
 
 ## The Exchange (master)
 
@@ -191,6 +195,8 @@ The table lists all Lines:
 **Click a row** to select a track: the analyser then shows its masking as heat columns (yellow → red), its spectrum before the engine dashed, its peak dotted and its spectrogram.
 
 ### Analyser, patchbay, VU
+On the left the line list and the analyser, on the right the **DETAILS** column with the patchbay, VU left/right and the spectrogram of the selected track. The list and DETAILS can be folded (triangle); the analyser then uses the space.
+
 - **Analyser**: all tracks as coloured areas, the **sum** as a cream line; with no selection the heat columns show the total occupancy per frequency.
 - **Patchbay**: matrix of all Lines – the row is masked by the column. Brighter = stronger. Click to select a track.
 - **VU Left/Right**: master level.
@@ -302,7 +308,7 @@ Typical workflow: choose a program → let the song play a few times → compare
 
 ## About AME
 
-**AME – Adaptive Mix Exchange**, version 1.0.2
+**AME – Adaptive Mix Exchange**, version 1.1.0
 
 Built by **Batze the bit builder**.
 

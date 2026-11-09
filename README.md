@@ -17,7 +17,7 @@ Put AME on your tracks (**Line**) and one instance on the master bus (**Exchange
 - **Export = monitor**: engine on the audio clock; **Recording** captures the adaptive processing along the song and replays it exactly – reproducible exports, also for stems
 - **Presets**: factory presets per role, user presets, A/B compare
 - **Visualisation**: analyser, spectrogram, masking patchbay, mix overview, VU meters
-- Vintage “valve gear” interface, freely scalable (50–200 %), **English/German** UI
+- Vintage “valve gear” interface, landscape layout for 1080p screens, foldable sections, freely scalable (50–200 %), **English/German** UI
 
 ## Compatibility
 - Works in **all common VST3 hosts on Windows (64-bit)**, e.g. Ableton Live, Cubase/Nuendo, Studio One, Reaper, Bitwig Studio, FL Studio and Cakewalk.
