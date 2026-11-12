@@ -263,6 +263,7 @@ void StripPanel::updateTexts()
     plateCounter = 14;   // Typenschild beim nächsten Meter-Update neu
     if (! getLocalBounds().isEmpty())
         resized();       // Breiten der Schalter folgen dem Text
+    backdrop.invalidate();   // Plattentitel
     repaint();
 }
 
@@ -526,6 +527,7 @@ void StripPanel::layoutRack (juce::Rectangle<int> r)
 
 void StripPanel::resized()
 {
+    backdrop.invalidate();
     // Querformat (Basis 1400 × 760): rechte Spalte VU/Typenschild/OUTPUT, links Presets, INPUT | FILTER | Rack,
     // darunter EQ | ADAPTIV nebeneinander
     auto area = getLocalBounds().reduced (8);
@@ -675,6 +677,20 @@ void StripPanel::resized()
 
 void StripPanel::paint (juce::Graphics& g)
 {
+    backdrop.draw (g, getLocalBounds(), false, [this] (juce::Graphics& bg) { paintPanels (bg); });
+
+    // veränderliche Anzeigen: nur, wenn ihr Bereich neu gezeichnet wird
+    const auto clip = g.getClipBounds();
+    if (clip.intersects (rackMeter.expanded (4)))
+        paintRack (g);
+    if (clip.intersects (adaptiveDisplay.expanded (6)))
+        paintAdaptive (g);
+    if (clip.intersects (plateArea))
+        paintPlate (g);
+}
+
+void StripPanel::paintPanels (juce::Graphics& g)
+{
     for (auto* s : { &input, &filter, &eq, &output })
         drawEngravedPanel (g, s->bounds.toFloat(), s->title);
     if (adaptiveFold.isFolded())
@@ -682,18 +698,22 @@ void StripPanel::paint (juce::Graphics& g)
     else
         drawEngravedPanel (g, adaptive.bounds.toFloat(), adaptive.title);
     drawEngravedPanel (g, presetBar.toFloat(), {});
+    if (! rackBounds.isEmpty())
+        drawEngravedPanel (g, rackBounds.toFloat(), {});
+}
 
-    paintRack (g);
-    paintAdaptive (g);
-    paintPlate (g);
+int StripPanel::rackSegments (float db) noexcept
+{
+    int lit = 0;
+    for (int i = 0; i < 12; ++i)
+        lit += db > (float) i * 2.0f + 0.25f ? 1 : 0;
+    return lit;
 }
 
 void StripPanel::paintRack (juce::Graphics& g)
 {
     if (rackBounds.isEmpty())
         return;
-
-    drawEngravedPanel (g, rackBounds.toFloat(), {});
 
     // Reduktionsanzeige (LED-Kette) des sichtbaren Moduls
     auto r = rackMeter.toFloat();
@@ -853,6 +873,12 @@ void StripPanel::refreshMeters()
     constexpr float dt = 1.0f / 30.0f;
     if (auto* d = hub.getAudioData (slot))
     {
+        // Host verarbeitet gerade? (Blockzähler steht = Transport/Spur ruht)
+        const auto blocks = d->blockCounter.load (std::memory_order_relaxed);
+        idleTicks = blocks != lastBlockCounter ? 0 : juce::jmin (1000, idleTicks + 1);
+        lastBlockCounter = blocks;
+        const bool audioActive = idleTicks < 45;
+
         levelVu.update (d->rmsDb.load(), d->peakDb.load(), dt);
         grVu.updateGainReduction (d->gainReductionDb.load(), dt);
         for (size_t k = 0; k < (size_t) kNumAdaptiveBands; ++k)
@@ -869,7 +895,7 @@ void StripPanel::refreshMeters()
         learnActive = d->learnActive.load();
         const auto rw = d->renderWarnMs.load();
         renderWarn = rw != 0 && juce::Time::getMillisecondCounter() - rw < 5u * 60u * 1000u;
-        eqGraph.refresh (dt);
+        eqGraph.refresh (dt, audioActive);
 
         // Rack: Reduktion (Anzeige mit schnellem Anstieg, langsamem Abfall) und Lampen der Reiter
         for (auto& m : modules)
@@ -883,16 +909,21 @@ void StripPanel::refreshMeters()
                 m->tab.repaint();
             }
         }
-        repaint (rackMeter.expanded (4));
+        if (auto& cur = *modules[(size_t) currentModule]; cur.shownSegments != rackSegments (cur.meterDb))
+        {
+            cur.shownSegments = rackSegments (cur.meterDb);
+            repaint (rackMeter.expanded (4));
+        }
 
         // Typenschild (2 Hz genügt)
         if (++plateCounter % 15 == 0)
         {
             exchangePresent = false;
-            for (const auto& t : hub.getSnapshot())
+            const auto snapshot = hub.getSnapshot();
+            for (const auto& t : snapshot)
                 if (t.mode == InstanceMode::Master)
                     exchangePresent = true;
-            for (const auto& t : hub.getSnapshot())
+            for (const auto& t : snapshot)
                 if (t.slot == slot)
                 {
                     plateName = t.name;
@@ -907,8 +938,24 @@ void StripPanel::refreshMeters()
             plateGenre = hub.isEngineAlive() ? getGenreNames()[hub.globalGenre.load()] : AME_TXT ("– no exchange –");
             repaint (plateArea);
         }
-        waterfall.pushRow (eqGraph.getSpectrum());
-        repaint (adaptiveDisplay.expanded (6));
+        if (audioActive)
+            waterfall.pushRow (eqGraph.getSpectrum());
+
+        // ADAPTIV-Anzeige: nur bei sichtbarer Änderung (LED-Segmente, Werte, Status)
+        std::array<int, kNumAdaptiveBands + 5> now {};
+        for (size_t k = 0; k < (size_t) kNumAdaptiveBands; ++k)
+            now[k] = (int) std::ceil (juce::jlimit (0.0f, 9.0f, -cutDb[k]) - 0.01f);   // 9 Segmente über 9 dB
+        now[kNumAdaptiveBands]     = hpfHz >= 20.0f ? juce::roundToInt (hpfHz) : 0;
+        now[kNumAdaptiveBands + 1] = juce::roundToInt (gainDb * 10.0f);
+        now[kNumAdaptiveBands + 2] = (int) learnSec;
+        now[kNumAdaptiveBands + 3] = learnMode;
+        now[kNumAdaptiveBands + 4] = (rawMonitor ? 1 : 0) | (noEngineMonitor ? 2 : 0) | (bypassed ? 4 : 0) | (learnActive ? 8 : 0)
+                                   | (engineAlive ? 16 : 0) | (frozen ? 32 : 0) | (renderWarn ? 64 : 0) | (exchangePresent ? 128 : 0);
+        if (now != adaptiveShown)
+        {
+            adaptiveShown = now;
+            repaint (adaptiveDisplay.expanded (6));
+        }
     }
 }
 } // namespace ame::ui

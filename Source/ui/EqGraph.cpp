@@ -103,36 +103,110 @@ int EqGraph::hitNode (juce::Point<float> pos) const
     return best;
 }
 
-float EqGraph::manualResponseDb (float hz) const
+EqGraph::ManualKey EqGraph::manualKey (const ChannelStrip::Params& p) noexcept
 {
-    ChannelStrip::Params p;
-    reader.read (p);
-    return ChannelStrip::getManualResponseDb (p, hz, displaySr);
+    return { (float) p.hpfOn, p.hpfFreq, (float) p.hpfSlope, (float) p.lpfOn, p.lpfFreq, (float) p.lpfSlope,
+             p.eqFreq[0], p.eqFreq[1], p.eqFreq[2], p.eqFreq[3],
+             p.eqGainDb[0], p.eqGainDb[1], p.eqGainDb[2], p.eqGainDb[3],
+             p.eqQ[0], p.eqQ[1], p.eqQ[2], p.eqQ[3], (float) p.lowBell, (float) p.highBell };
 }
 
-void EqGraph::refresh (float dtSec)
+void EqGraph::refresh (float dtSec, bool audioActive)
 {
+    bool changed = audioActive;
+
     if (auto* d = hub.getAudioData (slot))
     {
-        const float fall = 12.0f * dtSec;   // Peak-Hold fällt mit 12 dB/s
-        for (size_t i = 0; i < (size_t) kNumDisplayPoints; ++i)
+        if (audioActive)
         {
-            spectrumDb[i] = d->displayDb[i].load (std::memory_order_relaxed);
-            peakDb[i] = juce::jmax (spectrumDb[i], peakDb[i] - fall);
+            const float fall = 12.0f * dtSec;   // Peak-Hold fällt mit 12 dB/s
+            for (size_t i = 0; i < (size_t) kNumDisplayPoints; ++i)
+            {
+                spectrumDb[i] = d->displayDb[i].load (std::memory_order_relaxed);
+                peakDb[i] = juce::jmax (spectrumDb[i], peakDb[i] - fall);
+            }
         }
+
+        auto cut = cutDb;
         for (size_t k = 0; k < (size_t) kNumAdaptiveBands; ++k)
-            cutDb[k] = d->appliedCutDb[k].load (std::memory_order_relaxed);
-        hpfHz = d->appliedHpfHz.load();
-        gainDb = d->appliedGainDb.load();
-        hasSpectrum = d->analysisCounter.load() > 0;
+            cut[k] = d->appliedCutDb[k].load (std::memory_order_relaxed);
+        const float hpf = d->appliedHpfHz.load(), gain = d->appliedGainDb.load();
+        if (cut != cutDb || hpf != hpfHz || gain != gainDb)
+        {
+            cutDb = cut; hpfHz = hpf; gainDb = gain;
+            adaptiveDirty = true;
+            changed = true;
+        }
+
+        const bool has = d->analysisCounter.load() > 0;
+        changed = changed || has != hasSpectrum;
+        hasSpectrum = has;
     }
-    repaint();
+
+    // Parameter (auch Automation / Presets): Kurve und Punkte nur bei Änderung neu
+    ChannelStrip::Params p;
+    reader.read (p);
+    if (const auto key = manualKey (p); ! keyValid || key != shownKey)
+    {
+        shown = p; shownKey = key; keyValid = true;
+        manualDirty = true;
+        changed = true;
+    }
+
+    if (changed)
+        repaint();
+}
+
+void EqGraph::updateCurves (int steps)
+{
+    if (! keyValid)   // gezeichnet vor dem ersten refresh()
+    {
+        reader.read (shown);
+        shownKey = manualKey (shown);
+        keyValid = true;
+        manualDirty = true;
+    }
+
+    if ((int) curveHz.size() != steps + 1)
+    {
+        const auto p = plotArea();
+        curveHz.resize ((size_t) steps + 1);
+        manualDb.resize (curveHz.size());
+        adaptiveDb.resize (curveHz.size());
+        for (int i = 0; i <= steps; ++i)
+            curveHz[(size_t) i] = freqForX (p.getX() + p.getWidth() * (float) i / (float) steps);
+        manualDirty = adaptiveDirty = true;
+    }
+
+    if (manualDirty)
+    {
+        const ChannelStrip::ManualResponse response (shown, displaySr);
+        for (size_t i = 0; i < curveHz.size(); ++i)
+            manualDb[i] = response.dbAt (curveHz[i]);
+        manualDirty = false;
+    }
+
+    if (adaptiveDirty)
+    {
+        const ChannelStrip::AdaptiveResponse full (cutDb, hpfHz, gainDb), shape (cutDb, hpfHz, 0.0f);
+        const auto& hz = getDisplayPointTable();
+        for (size_t i = 0; i < (size_t) kNumDisplayPoints; ++i)
+            responseFine[i] = full.dbAt (hz[i]);
+        for (size_t i = 0; i < curveHz.size(); ++i)
+            adaptiveDb[i] = shape.dbAt (curveHz[i]);
+        adaptiveDirty = false;
+    }
 }
 
 void EqGraph::paint (juce::Graphics& g)
 {
     const auto p = plotArea();
     drawDisplayBezel (g, p);
+
+    const int steps = juce::jmax (8, juce::roundToInt (p.getWidth() / 2.0f));
+    updateCurves (steps);
+    // Anzeige-Punkte liegen logarithmisch gleichmäßig: x ist linear im Index
+    auto xForPoint = [&p] (int i) { return p.getX() + p.getWidth() * (float) i / (float) (kNumDisplayPoints - 1); };
 
     // Raster (Phosphor)
     g.setFont (fonts::mono (10.0f, true));
@@ -158,19 +232,18 @@ void EqGraph::paint (juce::Graphics& g)
     if (hasSpectrum)
     {
         juce::Path fill, post, peak;
-        fill.startNewSubPath (xForFreq (getDisplayPointHz (0)), p.getBottom());
+        fill.startNewSubPath (xForPoint (0), p.getBottom());
         for (int i = 0; i < kNumDisplayPoints; ++i)
         {
-            const float hz = getDisplayPointHz (i);
-            const float x = xForFreq (hz);
+            const float x = xForPoint (i);
             const float pre = spectrumDb[(size_t) i];
-            const float response = ChannelStrip::getAdaptiveResponseDb (cutDb, hpfHz, gainDb, hz);
+            const float response = responseFine[(size_t) i];
             fill.lineTo (x, ySpectrum (pre));
             const float yPost = ySpectrum (pre + response), yPeak = ySpectrum (peakDb[(size_t) i] + response);
             if (i == 0) { post.startNewSubPath (x, yPost); peak.startNewSubPath (x, yPeak); }
             else        { post.lineTo (x, yPost);          peak.lineTo (x, yPeak); }
         }
-        fill.lineTo (xForFreq (getDisplayPointHz (kNumDisplayPoints - 1)), p.getBottom());
+        fill.lineTo (xForPoint (kNumDisplayPoints - 1), p.getBottom());
         fill.closeSubPath();
 
         // Regenbogen-Füllung nach Frequenz (vor Engine)
@@ -195,13 +268,11 @@ void EqGraph::paint (juce::Graphics& g)
     bool anyAdaptive = std::abs (gainDb) > 0.05f || hpfHz >= 20.0f;
     for (auto cdb : cutDb) anyAdaptive |= cdb < -0.05f;
 
-    const int steps = juce::roundToInt (p.getWidth() / 2.0f);
     for (int i = 0; i <= steps; ++i)
     {
         const float x = p.getX() + p.getWidth() * (float) i / (float) steps;
-        const float hz = freqForX (x);
-        const float ym = yForDb (manualResponseDb (hz));
-        const float ya = yForDb (ChannelStrip::getAdaptiveResponseDb (cutDb, hpfHz, 0.0f, hz));
+        const float ym = yForDb (manualDb[(size_t) i]);
+        const float ya = yForDb (adaptiveDb[(size_t) i]);
         if (i == 0) { manual.startNewSubPath (x, ym); adaptive.startNewSubPath (x, ya); }
         else        { manual.lineTo (x, ym);          adaptive.lineTo (x, ya); }
     }
@@ -279,6 +350,7 @@ void EqGraph::mouseDrag (const juce::MouseEvent& e)
     setValue (n.freqId, freqForX (e.position.x));
     if (n.gainId != nullptr)
         setValue (n.gainId, dbForY (e.position.y));
+    keyValid = false;   // Kurve sofort mit den neuen Werten
     repaint();
 }
 

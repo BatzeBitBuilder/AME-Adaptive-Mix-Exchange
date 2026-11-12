@@ -4,6 +4,7 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include "LookAndFeel.h"
 
 namespace ame::ui
 {
@@ -26,6 +27,11 @@ public:
     void paint (juce::Graphics&) override;
 
 private:
+    void paintScale (juce::Graphics&);   // statischer Teil (wird als Bild gehalten)
+    void repaintIfMoved();
+    BackdropCache scaleCache;
+    float shownNeedle = -1.0f;
+    bool shownLamp = false;
     float positionForVu (float vu) const;    // 0..1
     float positionForGr (float gr) const;
 

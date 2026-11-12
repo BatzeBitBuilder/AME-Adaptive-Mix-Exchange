@@ -53,6 +53,38 @@ void drawScrew (juce::Graphics&, juce::Point<float> centre, float radius);
 void drawEngravedPanel (juce::Graphics&, juce::Rectangle<float>, const juce::String& title);
 void drawDisplayBezel (juce::Graphics&, juce::Rectangle<float>);
 
+// Statischer Hintergrund (Gehäuse, Platten, Skalen): einmal je Größe und Skalierung in ein Bild gerendert,
+// danach nur noch kopiert. Ohne das würde er bei jedem Teil-Repaint der Anzeigen (30-mal je Sekunde) neu gezeichnet.
+class BackdropCache
+{
+public:
+    void invalidate() noexcept { image = {}; }
+
+    template <typename PaintFn>
+    void draw (juce::Graphics& g, juce::Rectangle<int> bounds, bool opaque, PaintFn&& paintFn)
+    {
+        if (bounds.isEmpty())
+            return;
+        const float scale = juce::jlimit (0.25f, 4.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
+        const int w = juce::jmax (1, (int) std::ceil ((float) bounds.getWidth() * scale)),
+                  h = juce::jmax (1, (int) std::ceil ((float) bounds.getHeight() * scale));
+        if (image.isNull() || image.getWidth() != w || image.getHeight() != h || std::abs (scale - imageScale) > 1.0e-4f)
+        {
+            image = juce::Image (opaque ? juce::Image::RGB : juce::Image::ARGB, w, h, true);
+            imageScale = scale;
+            juce::Graphics ig (image);
+            ig.addTransform (juce::AffineTransform::scale (scale).translated (-(float) bounds.getX() * scale, -(float) bounds.getY() * scale));
+            paintFn (ig);
+        }
+        g.setOpacity (1.0f);
+        g.drawImageTransformed (image, juce::AffineTransform::scale (1.0f / scale).translated ((float) bounds.getX(), (float) bounds.getY()), false);
+    }
+
+private:
+    juce::Image image;
+    float imageScale = 0.0f;
+};
+
 class VintageLookAndFeel : public juce::LookAndFeel_V4
 {
 public:

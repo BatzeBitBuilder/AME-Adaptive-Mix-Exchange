@@ -29,6 +29,10 @@ public:
     // Buffer (mono/stereo) einspeisen; schreibt bei jedem Hop in 'out'
     void process (const juce::AudioBuffer<float>& buffer, SlotAudioData* out) noexcept;
 
+    // Klangmerkmale (Rollenerkennung) nur bei Bedarf rechnen: spart je Hop eine zweite FFT (Autokorrelation).
+    // Audio-Thread. Beim Einschalten beginnt die Auswertung neu.
+    void setFeaturesEnabled (bool shouldCompute) noexcept;
+
     static float getBandCentreHz (int band) noexcept;
     static float getBandEdgeHz (int edge) noexcept;   // edge 0..kNumAnalysisBands
 
@@ -62,6 +66,7 @@ private:
     float lastPitch = 0.0f;
     bool pitchVarInit = false;
     bool lastWasOnset = false;
+    bool featuresEnabled = true, featuresRestart = false;
     int minLag = 48, maxLag = 960;
 };
 } // namespace ame

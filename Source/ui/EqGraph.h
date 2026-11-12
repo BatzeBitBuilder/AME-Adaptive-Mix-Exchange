@@ -27,7 +27,8 @@ public:
     void mouseDoubleClick (const juce::MouseEvent&) override;
     void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
 
-    void refresh (float dtSec = 1.0f / 30.0f);
+    // audioActive = false: Spektrum steht (Host verarbeitet nicht) – neu gezeichnet wird dann nur bei Änderungen
+    void refresh (float dtSec = 1.0f / 30.0f, bool audioActive = true);
     const std::array<float, kNumDisplayPoints>& getSpectrum() const noexcept { return spectrumDb; }
 
 private:
@@ -52,7 +53,9 @@ private:
     bool nodeEnabled (const Node&) const;
     juce::Point<float> nodePosition (const Node&) const;
     int hitNode (juce::Point<float>) const;
-    float manualResponseDb (float hz) const;
+    using ManualKey = std::array<float, 20>;
+    static ManualKey manualKey (const ChannelStrip::Params&) noexcept;
+    void updateCurves (int steps);
 
     juce::AudioProcessorValueTreeState& apvts;
     MixHub& hub;
@@ -66,6 +69,13 @@ private:
     std::array<float, kNumAdaptiveBands> cutDb {};
     float hpfHz = 0.0f, gainDb = 0.0f;
     bool hasSpectrum = false;
+
+    // Kurven werden nur neu berechnet, wenn sich Parameter, Engine-Werte oder die Breite ändern
+    ChannelStrip::Params shown;
+    ManualKey shownKey {};
+    bool keyValid = false, manualDirty = true, adaptiveDirty = true;
+    std::vector<float> curveHz, manualDb, adaptiveDb;                 // je Kurvenpunkt
+    std::array<float, kNumDisplayPoints> responseFine {};            // adaptiver Frequenzgang je Anzeige-Punkt
 
     static constexpr float rangeDb = 18.0f;
 };

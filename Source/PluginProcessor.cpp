@@ -14,6 +14,19 @@ AmeProcessor::AmeProcessor()
       apvts (*this, nullptr, "MultiTrackMix", createParameterLayout()),   // state type: keep for compatibility with saved projects
       stripParams (apvts)
 {
+    prm.mode = apvts.getRawParameterValue (pid::mode);
+    prm.role = apvts.getRawParameterValue (pid::role);
+    prm.amount = apvts.getRawParameterValue (pid::amount);
+    prm.priority = apvts.getRawParameterValue (pid::priority);
+    prm.reaction = apvts.getRawParameterValue (pid::reaction);
+    prm.adaptEq = apvts.getRawParameterValue (pid::adaptEq);
+    prm.adaptHpf = apvts.getRawParameterValue (pid::adaptHpf);
+    prm.adaptGain = apvts.getRawParameterValue (pid::adaptGain);
+    prm.adaptBypass = apvts.getRawParameterValue (pid::adaptBypass);
+    prm.adaptFreeze = apvts.getRawParameterValue (pid::adaptFreeze);
+    prm.learnMode = apvts.getRawParameterValue (pid::learnMode);
+    prm.levelMatch = apvts.getRawParameterValue (pid::levelMatch);
+
     slot = hub->registerInstance (instanceId);
     lastFreezeCommandGen = hub->freezeCommandGen.load();
     lastLearnCommandGen = hub->learnCommandGen.load();
@@ -35,7 +48,7 @@ float AmeProcessor::param (const char* id) const noexcept
 
 InstanceMode AmeProcessor::getMode() const noexcept
 {
-    return (InstanceMode) juce::roundToInt (param (pid::mode));
+    return (InstanceMode) juce::roundToInt (prm.mode->load (std::memory_order_relaxed));
 }
 
 bool AmeProcessor::isActiveMaster() const
@@ -150,7 +163,8 @@ void AmeProcessor::timerCallback()
 
 void AmeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    dryBuffer.setSize (2, juce::jmax (1, samplesPerBlock), false, true, false);
+    // großzügig anlegen: manche Hosts liefern größere Blöcke als angekündigt (keine Allokation im Audio-Thread)
+    dryBuffer.setSize (2, juce::jmax (4096, samplesPerBlock), false, true, false);
     rawMix = 0.0f;
     matchGain.reset (sampleRate, 0.05);
     matchGain.setCurrentAndTargetValue (1.0f);
@@ -210,26 +224,28 @@ void AmeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
         strip.processPre (buffer, p);
 
-        // Analyse vor den adaptiven Eingriffen (keine Rückkopplung in die Engine)
+        // Analyse vor den adaptiven Eingriffen (keine Rückkopplung in die Engine);
+        // Klangmerkmale nur, solange die Rolle automatisch erkannt wird
+        analyzer.setFeaturesEnabled (juce::roundToInt (prm.role->load (std::memory_order_relaxed)) == (int) Role::Auto);
         analyzer.process (buffer, data);
 
         if (data != nullptr)
         {
-            const float reaction = param (pid::reaction) * 0.01f;
+            const float reaction = prm.reaction->load (std::memory_order_relaxed) * 0.01f;
             data->reaction.store (reaction, std::memory_order_relaxed);
-            data->priorityOffset.store (getPriorityOffset (juce::roundToInt (param (pid::priority))), std::memory_order_relaxed);
+            data->priorityOffset.store (getPriorityOffset (juce::roundToInt (prm.priority->load (std::memory_order_relaxed))), std::memory_order_relaxed);
 
             const bool alive = hub->isEngineAlive();
-            const float amt = alive ? param (pid::amount) * 0.01f * hub->globalAmount.load() : 0.0f;
-            const bool eqOn = param (pid::adaptEq) > 0.5f, hpfOn = param (pid::adaptHpf) > 0.5f,
-                       gainOn = param (pid::adaptGain) > 0.5f;
-            const bool bypass = param (pid::adaptBypass) > 0.5f || hub->globalBypass.load (std::memory_order_relaxed);
-            const bool freeze = param (pid::adaptFreeze) > 0.5f;
+            const float amt = alive ? prm.amount->load (std::memory_order_relaxed) * 0.01f * hub->globalAmount.load() : 0.0f;
+            const bool eqOn = prm.adaptEq->load (std::memory_order_relaxed) > 0.5f, hpfOn = prm.adaptHpf->load (std::memory_order_relaxed) > 0.5f,
+                       gainOn = prm.adaptGain->load (std::memory_order_relaxed) > 0.5f;
+            const bool bypass = prm.adaptBypass->load (std::memory_order_relaxed) > 0.5f || hub->globalBypass.load (std::memory_order_relaxed);
+            const bool freeze = prm.adaptFreeze->load (std::memory_order_relaxed) > 0.5f;
 
             const float blockSec = (float) numSamples / (float) getSampleRate();
 
             // Mitschnitt: Songposition der DAW
-            const int learn = juce::roundToInt (param (pid::learnMode));
+            const int learn = juce::roundToInt (prm.learnMode->load (std::memory_order_relaxed));
             double posSec = -1.0;
             bool playing = false;
             if (auto* ph = getPlayHead())
@@ -248,7 +264,7 @@ void AmeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
 
             // Export erkannt (Host-Kennung oder schneller als Echtzeit), aber weder Engine noch Mitschnitt → Warnung
             const bool fastRender = renderSpeed.update (numSamples, getSampleRate()) || isNonRealtime();
-            if (fastRender && ! replay && ! bypass && ! freeze && ! alive && param (pid::amount) > 0.0f)
+            if (fastRender && ! replay && ! bypass && ! freeze && ! alive && prm.amount->load (std::memory_order_relaxed) > 0.0f)
                 data->renderWarnMs.store (juce::jmax (1u, juce::Time::getMillisecondCounter()), std::memory_order_relaxed);
             auto coef = [blockSec] (float tau) { return std::exp (-blockSec / tau); };
 
@@ -385,6 +401,7 @@ void AmeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
     else
     {
         // Master: Durchschleifen, Messung (vor dem Pegelangleich)
+        analyzer.setFeaturesEnabled (false);
         analyzer.process (buffer, data);
 
         // Engine im Takt des Audios: je 20 ms ein Schritt – Echtzeit und Export verhalten sich gleich
@@ -395,7 +412,7 @@ void AmeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         }
 
         // Roh-Abhöre: Lautheitsunterschied zur bearbeiteten Fassung am Ausgang ausgleichen
-        const bool raw = activeMasterFlag.load (std::memory_order_relaxed) && hub->isRawMonitor() && param (pid::levelMatch) > 0.5f;
+        const bool raw = activeMasterFlag.load (std::memory_order_relaxed) && hub->isRawMonitor() && prm.levelMatch->load (std::memory_order_relaxed) > 0.5f;
         matchGain.setTargetValue (raw ? juce::Decibels::decibelsToGain (hub->rawMatchDb.load (std::memory_order_relaxed)) : 1.0f);
         if (matchGain.isSmoothing() || std::abs (matchGain.getTargetValue() - 1.0f) > 1.0e-4f)
         {

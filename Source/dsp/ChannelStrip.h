@@ -82,6 +82,29 @@ public:
     // Frequenzgang von Filtern + EQ (für die Anzeige)
     static float getManualResponseDb (const Params&, float freq, double sampleRate = 48000.0) noexcept;
 
+    // Frequenzgänge für die Anzeige, wenn viele Frequenzen abgefragt werden: Koeffizienten einmal aufsetzen
+    class ManualResponse
+    {
+    public:
+        explicit ManualResponse (const Params&, double sampleRate = 48000.0) noexcept;
+        float dbAt (float freq) const noexcept;
+    private:
+        std::array<Biquad, 12> stages;   // bis 4 + 4 Filterstufen, 4 EQ-Bänder
+        int numStages = 0;
+        double rate;
+    };
+
+    class AdaptiveResponse
+    {
+    public:
+        AdaptiveResponse (const std::array<float, kNumAdaptiveBands>& cutDb, float hpfHz, float gainDb) noexcept;
+        float dbAt (float freq) const noexcept;
+    private:
+        std::array<double, kNumAdaptiveBands> fc {}, a2 {}, invA2 {};
+        int numBands = 0;
+        double gain = 0.0, hpf = 0.0;
+    };
+
     // Kennlinie der Sättigung (Kleinsignal-Verstärkung 1)
     static float saturate (int type, float x) noexcept;
 
@@ -112,6 +135,13 @@ private:
     float compEnvDb = 0.0f, compFastDb = 0.0f, compSlowDb = 0.0f;
     Biquad compSc;
     float compScApplied = -1.0f;
+    float mkDb = 0.0f, mkGain = 1.0f;          // Makeup: Verstärkung nur bei geändertem dB-Wert neu
+
+    // Zuletzt aufgesetzte Filterwerte: Koeffizienten werden nur bei Änderung neu berechnet
+    float hpfAppliedF = -1.0f, lpfAppliedF = -1.0f, deessApplied = -1.0f;
+    int hpfAppliedSlope = -1, lpfAppliedSlope = -1;
+    std::array<float, 4> eqAppliedF {}, eqAppliedQ {}, eqAppliedG {};
+    std::array<int, 4> eqAppliedType { -1, -1, -1, -1 };
 
     // Gate / Expander
     Biquad gateSc;
@@ -141,6 +171,7 @@ private:
 
     // Ausgang
     juce::SmoothedValue<float> outGain, panS, widthS;
+    float panApplied = 100.0f, panGl = 1.0f, panGr = 1.0f;   // Pan-Law nur bei geändertem Pan neu
     float limGain = 1.0f, limRedDb = 0.0f;
 };
 } // namespace ame

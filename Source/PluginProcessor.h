@@ -72,6 +72,14 @@ private:
     void timerCallback() override;
     float param (const char* id) const noexcept;
 
+    // Parameter des Audio-Threads: Zeiger einmal holen statt je Block per Namen suchen
+    struct AudioParams
+    {
+        std::atomic<float> *mode = nullptr, *role = nullptr, *amount = nullptr, *priority = nullptr, *reaction = nullptr,
+                           *adaptEq = nullptr, *adaptHpf = nullptr, *adaptGain = nullptr, *adaptBypass = nullptr,
+                           *adaptFreeze = nullptr, *learnMode = nullptr, *levelMatch = nullptr;
+    } prm;
+
     juce::SharedResourcePointer<ame::MixHub> hub;
     int slot = -1;
     uint32_t instanceId = 0;

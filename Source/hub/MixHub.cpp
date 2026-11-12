@@ -497,6 +497,7 @@ std::vector<TrackSnapshot> MixHub::getSnapshot() const
             s.bandAvgDb[b] = a.bandAvgDb[b].load (std::memory_order_relaxed);
         }
         s.hasAnalysis = a.analysisCounter.load (std::memory_order_acquire) > 0;
+        s.blockCounter = a.blockCounter.load (std::memory_order_relaxed);
         for (size_t d = 0; d < (size_t) kNumDisplayPoints; ++d)
             s.displayDb[d] = a.displayDb[d].load (std::memory_order_relaxed);
         s.rmsLeftDb = a.rmsLeftDb.load();

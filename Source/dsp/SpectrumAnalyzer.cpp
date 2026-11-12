@@ -110,10 +110,31 @@ void SpectrumAnalyzer::reset()
     lastWasOnset = false;
 }
 
+void SpectrumAnalyzer::setFeaturesEnabled (bool shouldCompute) noexcept
+{
+    if (shouldCompute && ! featuresEnabled)
+        featuresRestart = true;
+    featuresEnabled = shouldCompute;
+}
+
 void SpectrumAnalyzer::process (const juce::AudioBuffer<float>& buffer, SlotAudioData* out) noexcept
 {
     if (out == nullptr || fifo.empty())
         return;
+
+    if (featuresRestart)   // Merkmale waren aus: nicht mit alten Mittelwerten weiterrechnen
+    {
+        featuresRestart = false;
+        std::fill (prevMag.begin(), prevMag.end(), 0.0f);
+        feat = {};
+        midEnergy = sideEnergy = 0.0;
+        lastFrameDb = -120.0f;
+        peakHold = rmsLong = 0.0f;
+        lastPitch = 0.0f;
+        pitchVarInit = false;
+        lastWasOnset = false;
+        out->fActiveSec.store (0.0f, std::memory_order_relaxed);
+    }
 
     const int n = buffer.getNumSamples();
     const int nch = buffer.getNumChannels();
@@ -122,14 +143,19 @@ void SpectrumAnalyzer::process (const juce::AudioBuffer<float>& buffer, SlotAudi
 
     const float* L = buffer.getReadPointer (0);
     const float* R = nch > 1 ? buffer.getReadPointer (1) : nullptr;
+    const bool features = featuresEnabled;
 
     for (int i = 0; i < n; ++i)
     {
         const float l = L[i];
         const float r = R != nullptr ? R[i] : l;
-        const float m = 0.5f * (l + r), s = 0.5f * (l - r);
-        midEnergy += (double) (m * m);
-        sideEnergy += (double) (s * s);
+        const float m = 0.5f * (l + r);
+        if (features)
+        {
+            const float s = 0.5f * (l - r);
+            midEnergy += (double) (m * m);
+            sideEnergy += (double) (s * s);
+        }
 
         fifo[(size_t) fifoPos++] = m;
 
@@ -225,7 +251,8 @@ void SpectrumAnalyzer::performAnalysis (SlotAudioData* out) noexcept
         }
     }
 
-    updateFeatures (out, frameRms, peak);
+    if (featuresEnabled)
+        updateFeatures (out, frameRms, peak);
     out->analysisCounter.fetch_add (1, std::memory_order_release);
 }
 

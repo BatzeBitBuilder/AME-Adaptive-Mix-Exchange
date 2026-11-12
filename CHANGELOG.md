@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.1.1 – 2026-11-12 (performance)
+No change to the sound: the audio output and the engine targets are bit-identical to 1.1.0 (compared sample by sample in the benchmark, including moving parameters). Figures: Linux build, 48 kHz, 512-sample blocks, one core; your machine will differ, the ratios should not.
+
+**Audio thread**
+- Channel strip: filter coefficients (EQ, HPF/LPF, de-esser) are only recalculated while a value actually changes, not every 32 samples; make-up gain and pan law only when their value changes; gate, compressor and de-esser skip the logarithm while the signal is clearly below (or, for the gate, above) the threshold. Line with all modules on: 1.34 % → 1.05 % of a core, with all modules off: 0.51 % → 0.29 %
+- Sound features for Auto-ID (second FFT per analysis frame) only run while the role is set to Auto-ID, never on the Exchange. After switching from a fixed role to Auto-ID the analysis starts again (about 3 s of signal)
+- Engine: band centres, octave mapping and role priorities come from tables; spectra are only re-read when a Line delivered a new analysis frame. Engine step with 48 Lines: 468 µs → 210 µs
+- Project state: the compressed recording is reused until the recording changes. Saving a Line with a 10 min recording again: 19.8 ms → 1.0 ms
+- Parameter pointers cached for the audio thread; the buffer for the raw monitor is allocated generously in `prepareToPlay` (no allocation if the host sends larger blocks than announced)
+
+**User interface**
+- Cabinet, front panel, engraved plates and VU scales are rendered once per size into an image instead of on every partial repaint (30 times per second). Line window: full repaint 30 ms → 12 ms, EQ area 12.6 ms → 3.9 ms
+- EQ graph: the manual curve and the engine curve are only recalculated when parameters or engine values change (previously all parameters were read and up to 12 filters set up for each of about 400 curve points, every frame)
+- Mix overview: masking, line list and patchbay at 10 Hz (analyser still 30 Hz), adaptive responses per Line only when its values change. With 48 Lines: timers 186 → 39 CPU ms per second, analyser repaint 64 ms → 11 ms
+- Mix overview: with more than 12 Lines the analyser draws the tracks as plain lines (the selected track and the sum keep area and glow) – faster and easier to read
+- VU meters, rack meter and ADAPTIVE display only repaint when something visible changes; spectrum, spectrogram and mix overview rest while the host is not processing audio (after about 1.5 s)
+- Resizing with the corner no longer writes the settings file on every mouse step (saved once the size settles)
+
+**Tests**
+- `AMESmokeTest --bench <folder>`: benchmark of audio path, engine, project state and UI, plus raw dumps to compare two builds sample by sample
+- Smoke test: state cache never stale, feature analysis on/off, fast display responses equal the reference
+
 ## 1.1.0 – 2026-11-09 (landscape layout, folding sections)
 - **Landscape window**: base size 1400 × 760 instead of 1100 × 960 – fits 1080p screens, also with 125 % Windows scaling; still scalable 50–200 % with a fixed aspect ratio
 - Line: ADAPTIVE moved next to the EQ (vertical column), status and applied values on two lines; VU meters and type plate more compact

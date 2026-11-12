@@ -35,7 +35,7 @@ MixOverview::MixOverview (MixHub& h) : hub (h)
     addAndMakeVisible (matrix);
     waterfall.setRange (-90.0f, -20.0f);
     peakDb.fill (-100.0f);
-    matrix.onSelect = [this] (uint32_t id) { selectedId = id; repaint(); };
+    matrix.onSelect = [this] (uint32_t id) { selectedId = id; slowDirty = true; idleTicks = 0; repaint(); };
     for (auto* f : { &listFold, &detailsFold })
     {
         f->onFoldChanged = [this] { resized(); repaint(); };
@@ -77,31 +77,76 @@ void MixOverview::refresh (uint32_t ownInstanceId, float dt)
         selectedId = ownInstanceId;
     }
 
-    const auto oldCount = tracks.size();
-    tracks = hub.getSnapshot();
-    maskingPre = computeMasking (tracks);
+    ++tick;
 
-    // Spektren nach den adaptiven Eingriffen (analytischer Frequenzgang)
-    responseDb.assign (tracks.size(), {});
-    responseFine.assign (tracks.size(), {});
-    auto post = tracks;
+    // Läuft überhaupt Audio? Sonst stehen alle Werte – dann genügt ein langsamer Takt.
+    if (idleTicks > 45)
+    {
+        uint32_t live = 0;
+        for (const auto& t : tracks)
+            if (auto* d = hub.getAudioData (t.slot))
+                live += d->blockCounter.load (std::memory_order_relaxed);
+        if (live == blockSum && tick % 15 != 0)
+            return;
+    }
+
+    auto old = std::move (tracks);
+    tracks = hub.getSnapshot();
+
+    uint32_t sum = 0;
+    for (const auto& t : tracks)
+        sum += t.blockCounter;
+    idleTicks = sum != blockSum ? 0 : idleTicks + 1;
+    blockSum = sum;
+
+    // Frequenzgang der adaptiven Stufe je Line: nur neu, wenn sich die angewendeten Werte geändert haben
+    bool sameLines = old.size() == tracks.size() && responseFine.size() == tracks.size();
+    for (size_t i = 0; sameLines && i < tracks.size(); ++i)
+        sameLines = old[i].instanceId == tracks[i].instanceId;
+    if (! sameLines)
+    {
+        responseDb.assign (tracks.size(), {});
+        responseFine.assign (tracks.size(), {});
+        slowDirty = true;
+    }
+
+    static const auto bandCentres = []
+    {
+        std::array<float, kNumAnalysisBands> c {};
+        for (int b = 0; b < kNumAnalysisBands; ++b)
+            c[(size_t) b] = SpectrumAnalyzer::getBandCentreHz (b);
+        return c;
+    }();
+    const auto& pointHz = getDisplayPointTable();
+
     for (size_t i = 0; i < tracks.size(); ++i)
     {
         const auto& t = tracks[i];
-        for (int b = 0; b < kNumAnalysisBands; ++b)
-        {
-            const float r = ChannelStrip::getAdaptiveResponseDb (t.appliedCutDb, t.appliedHpfHz, t.appliedGainDb,
-                                                                 SpectrumAnalyzer::getBandCentreHz (b));
-            responseDb[i][(size_t) b] = r;
-            post[i].bandAvgDb[(size_t) b] += r;
-        }
-        for (int d = 0; d < kNumDisplayPoints; ++d)
-            responseFine[i][(size_t) d] = ChannelStrip::getAdaptiveResponseDb (t.appliedCutDb, t.appliedHpfHz, t.appliedGainDb,
-                                                                               getDisplayPointHz (d));
-    }
-    masking = computeMasking (post);
+        if (sameLines && old[i].appliedCutDb == t.appliedCutDb && old[i].appliedHpfHz == t.appliedHpfHz
+             && old[i].appliedGainDb == t.appliedGainDb)
+            continue;
 
-    if (tracks.size() != oldCount)
+        const ChannelStrip::AdaptiveResponse response (t.appliedCutDb, t.appliedHpfHz, t.appliedGainDb);
+        for (size_t b = 0; b < (size_t) kNumAnalysisBands; ++b)
+            responseDb[i][b] = response.dbAt (bandCentres[b]);
+        for (size_t d = 0; d < (size_t) kNumDisplayPoints; ++d)
+            responseFine[i][d] = response.dbAt (pointHz[d]);
+    }
+
+    // Maskierung (vor / nach den adaptiven Eingriffen) arbeitet mit dem Langzeit-Spektrum (~3 s): 10 Hz genügen
+    const bool slow = slowDirty || tick % 3 == 0;
+    if (slow)
+    {
+        slowDirty = false;
+        maskingPre = computeMasking (tracks);
+        auto post = tracks;
+        for (size_t i = 0; i < tracks.size(); ++i)
+            for (size_t b = 0; b < (size_t) kNumAnalysisBands; ++b)
+                post[i].bandAvgDb[b] += responseDb[i][b];
+        masking = computeMasking (post);
+    }
+
+    if (tracks.size() != old.size())
         resized();
 
     // VU L/R der eigenen Instanz (im Master = Summe)
@@ -127,11 +172,17 @@ void MixOverview::refresh (uint32_t ownInstanceId, float dt)
         waterfall.setCaption (tr ("SPEKTROGRAMM · ", "SPECTROGRAM · ") + tracks[(size_t) sel].name.toUpperCase());
     }
 
-    std::vector<juce::Colour> cols;
-    for (const auto& t : tracks) cols.push_back (colourFor (t));
-    matrix.setData (tracks, masking, cols, selectedId);
-
-    repaint();
+    if (slow)
+    {
+        std::vector<juce::Colour> cols;
+        for (const auto& t : tracks) cols.push_back (colourFor (t));
+        matrix.setData (tracks, masking, cols, selectedId);
+        repaint();   // Liste + Analyzer
+    }
+    else
+    {
+        repaint (spectrumArea);
+    }
 }
 
 void MixOverview::resized()
@@ -181,15 +232,20 @@ void MixOverview::mouseDown (const juce::MouseEvent& e)
     {
         const auto id = tracks[(size_t) row].instanceId;
         selectedId = (selectedId == id ? 0 : id);
+        slowDirty = true;   // Patchfeld-Auswahl sofort nachführen
+        idleTicks = 0;
         repaint();
     }
 }
 
 void MixOverview::paint (juce::Graphics& g)
 {
-    paintList (g, listArea);
-    paintSpectrum (g, spectrumArea);
-    if (detailsFold.isFolded())
+    const auto clip = g.getClipBounds();
+    if (clip.intersects (listArea))
+        paintList (g, listArea);
+    if (clip.intersects (spectrumArea))
+        paintSpectrum (g, spectrumArea);
+    if (detailsFold.isFolded() && clip.intersects (detailsArea))
         drawFoldedColumn (g, detailsArea.toFloat(), tr ("PATCHFELD · PEGEL · SPEKTROGRAMM", "PATCHBAY · LEVEL · SPECTROGRAM"));
 }
 
@@ -433,23 +489,34 @@ void MixOverview::paintSpectrum (juce::Graphics& g, juce::Rectangle<int> area)
         g.drawText (juce::String (db), juce::Rectangle<float> (plot.getX() - 27.0f, y - 6.0f, 22.0f, 12.0f), juce::Justification::centredRight);
     }
 
-    // Kurven nach Engine, je Spur in ihrer Farbe (Fläche + Leuchtlinie)
+    // Kurven nach Engine, je Spur in ihrer Farbe (Fläche + Leuchtlinie).
+    // Anzeige-Punkte liegen logarithmisch gleichmäßig: x ist linear im Index.
+    auto xAt = [&plot] (int d) { return plot.getX() + plot.getWidth() * (float) d / (float) (kNumDisplayPoints - 1); };
     auto curve = [&] (int idx, const float* values, bool closed)
     {
         juce::Path p;
-        if (closed) p.startNewSubPath (xOf (getDisplayPointHz (0)), plot.getBottom());
+        p.preallocateSpace (3 * kNumDisplayPoints + 16);
+        if (closed) p.startNewSubPath (xAt (0), plot.getBottom());
         for (int d = 0; d < kNumDisplayPoints; ++d)
         {
-            const float x = xOf (getDisplayPointHz (d));
+            const float x = xAt (d);
             const float y = yOf (values[d] + responseFine[(size_t) idx][(size_t) d]);
             if (d == 0 && ! closed) p.startNewSubPath (x, y); else p.lineTo (x, y);
         }
-        if (closed) { p.lineTo (xOf (getDisplayPointHz (kNumDisplayPoints - 1)), plot.getBottom()); p.closeSubPath(); }
+        if (closed) { p.lineTo (xAt (kNumDisplayPoints - 1), plot.getBottom()); p.closeSubPath(); }
         return p;
     };
 
     g.saveState();
     g.reduceClipRegion (plot.toNearestInt());
+
+    // Viele Lines: Fläche und Leuchtsaum je Line kosten am meisten und überdecken sich ohnehin –
+    // dann je Line nur eine Linie (die gewählte Line und die Summe behalten Fläche und Saum)
+    int numCurves = 0;
+    for (const auto& t : tracks)
+        numCurves += (t.mode == InstanceMode::Track && t.hasAnalysis) ? 1 : 0;
+    const bool many = numCurves > maxGlowCurves;
+    const uint32_t activeMasterId = hub.getActiveMasterId();
 
     for (int i = 0; i < (int) tracks.size(); ++i)
     {
@@ -457,6 +524,12 @@ void MixOverview::paintSpectrum (juce::Graphics& g, juce::Rectangle<int> area)
         if (t.mode != InstanceMode::Track || ! t.hasAnalysis || i == selIdx) continue;
         const auto c = colourFor (t);
         const bool dim = selTrack >= 0;
+        if (many)
+        {
+            g.setColour (c.withAlpha (dim ? 0.4f : 0.85f));
+            g.strokePath (curve (i, t.displayDb.data(), false), juce::PathStrokeType (1.0f));
+            continue;
+        }
         g.setColour (c.withAlpha (dim ? 0.06f : 0.16f));
         g.fillPath (curve (i, t.displayDb.data(), true));
         if (dim)
@@ -474,11 +547,11 @@ void MixOverview::paintSpectrum (juce::Graphics& g, juce::Rectangle<int> area)
     for (int i = 0; i < (int) tracks.size(); ++i)
     {
         const auto& t = tracks[(size_t) i];
-        if (t.mode != InstanceMode::Master || t.instanceId != hub.getActiveMasterId() || ! t.hasAnalysis) continue;
+        if (t.mode != InstanceMode::Master || t.instanceId != activeMasterId || ! t.hasAnalysis) continue;
         juce::Path sum;
         for (int d = 0; d < kNumDisplayPoints; ++d)
         {
-            const float x = xOf (getDisplayPointHz (d)), y = yOf (t.displayDb[(size_t) d]);
+            const float x = xAt (d), y = yOf (t.displayDb[(size_t) d]);
             if (d == 0) sum.startNewSubPath (x, y); else sum.lineTo (x, y);
         }
         drawPhosphorGlow (g, sum, colours::cream.withAlpha (0.8f), i == selIdx ? 1.8f : 1.0f);
@@ -496,7 +569,7 @@ void MixOverview::paintSpectrum (juce::Graphics& g, juce::Rectangle<int> area)
         juce::Path pk;
         for (int d = 0; d < kNumDisplayPoints; ++d)
         {
-            const float x = xOf (getDisplayPointHz (d)), y = yOf (peakDb[(size_t) d]);
+            const float x = xAt (d), y = yOf (peakDb[(size_t) d]);
             if (d == 0) pk.startNewSubPath (x, y); else pk.lineTo (x, y);
         }
         juce::Path dotted;
@@ -511,7 +584,7 @@ void MixOverview::paintSpectrum (juce::Graphics& g, juce::Rectangle<int> area)
     // Legende: Spurfarben + Summe
     g.setFont (fonts::mono (10.0f, true));
     auto legend = plot.reduced (8.0f, 5.0f).removeFromTop (12.0f);
-    if (hub.getActiveMasterId() != 0)
+    if (activeMasterId != 0)
     {
         auto r = legend.removeFromRight (60.0f);
         g.setColour (colours::cream);

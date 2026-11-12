@@ -77,6 +77,7 @@ private:
         std::vector<Knob*> knobs;
         std::function<float (const SlotAudioData&)> reduction;   // dB >= 0
         float meterDb = 0.0f;
+        int shownSegments = -1;   // zuletzt gezeichnete LED-Segmente
     };
 
     Knob* addKnob (const char* paramId, const juce::String& label);
@@ -85,6 +86,7 @@ private:
     RackModule& addModule (const char* onParam, std::function<float (const SlotAudioData&)> reduction);
     void layoutKnobRow (const std::vector<Knob*>&, juce::Rectangle<int>);
     void layoutRack (juce::Rectangle<int>);
+    void paintPanels (juce::Graphics&);   // gravierte Platten: statisch, als Bild gehalten
     void paintRack (juce::Graphics&);
     void paintAdaptive (juce::Graphics&);
     void paintPlate (juce::Graphics&);
@@ -151,5 +153,12 @@ private:
     juce::Rectangle<int> plateArea;
     juce::String plateName, plateRole, plateGenre, plateLine;
     int plateCounter = 14;
+
+    BackdropCache backdrop;
+    // Neuzeichnen nur bei sichtbaren Änderungen; ohne Host-Blöcke (~1,5 s) ruhen Spektrum und Spektrogramm
+    uint32_t lastBlockCounter = 0;
+    int idleTicks = 0;
+    std::array<int, kNumAdaptiveBands + 5> adaptiveShown {};
+    static int rackSegments (float db) noexcept;
 };
 } // namespace ame::ui

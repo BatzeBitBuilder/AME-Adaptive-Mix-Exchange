@@ -1,6 +1,6 @@
 # AME – Adaptive Mix Exchange
 
-**Handbuch · Version 1.1.0** · entwickelt von **Batze the bit builder**
+**Handbuch · Version 1.1.1** · entwickelt von **Batze the bit builder**
 
 *Every track finds its aim.* – Jede Spur bekommt ihren Platz.
 
@@ -197,7 +197,7 @@ Die Tabelle listet alle Lines:
 ### Analyzer, Patchfeld, VU
 Links Line-Liste und Analyzer, rechts die Spalte **DETAILS** mit Patchfeld, VU Links/Rechts und dem Spektrogramm der ausgewählten Spur. Liste und DETAILS lassen sich einklappen (Dreieck), der Analyzer nutzt dann den Platz.
 
-- **Analyzer**: alle Spuren als farbige Flächen, die **Summe** als Creme-Linie; ohne Auswahl zeigen die Wärmesäulen die Gesamtbelegung je Frequenz.
+- **Analyzer**: alle Spuren als farbige Flächen, die **Summe** als Creme-Linie; ohne Auswahl zeigen die Wärmesäulen die Gesamtbelegung je Frequenz. Bei mehr als 12 Lines werden die Spuren als einfache Linien gezeichnet (übersichtlicher und schneller); die ausgewählte Spur behält ihre Fläche.
 - **Patchfeld**: Matrix aller Lines – Zeile wird von Spalte verdeckt. Je heller, desto stärker. Klick wählt die Spur.
 - **VU Links/Rechts**: Summenpegel.
 
@@ -224,7 +224,7 @@ Bei **Auto-Kennung** erkennt AME die Rolle selbst:
 2. **Klang** (nach ca. 3 s Signal): Schwerpunkt, Tonalität, Grundton, Transienten, Vibrato, Crest-Faktor, Stereobreite. Anzeige „→ Rolle (xx %)".
 3. **Hysterese**: Ein Wechsel erfolgt nur bei deutlichem Vorsprung (+15 %); unter 25 % Sicherheit gilt „Sonstiges".
 
-Eine manuell gewählte Rolle hat immer Vorrang.
+Eine manuell gewählte Rolle hat immer Vorrang. Die Klanganalyse läuft nur bei Auto-Kennung (spart Rechenleistung); nach dem Umschalten von einer festen Rolle auf Auto-Kennung beginnt sie neu und braucht wieder ca. 3 s Signal.
 
 ## So arbeitet die Engine
 
@@ -308,7 +308,7 @@ Typischer Ablauf: Programm wählen → Song einige Male durchlaufen lassen → m
 
 ## Über AME
 
-**AME – Adaptive Mix Exchange**, Version 1.1.0
+**AME – Adaptive Mix Exchange**, Version 1.1.1
 
 Entwickelt von **Batze the bit builder**.
 

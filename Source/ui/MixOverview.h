@@ -47,6 +47,12 @@ private:
     std::array<float, kNumDisplayPoints> peakDb {};
     uint32_t ownId = 0, selectedId = 0, peakForId = 0;
 
+    // Takt: Analyzer mit jedem Aufruf (30 Hz), Maskierung und Liste mit 10 Hz;
+    // ohne laufendes Audio (kein Host-Block seit ~1,5 s) nur noch 2-mal je Sekunde
+    int tick = 0, idleTicks = 0;
+    uint32_t blockSum = 0;
+    bool slowDirty = true;
+
     VuMeter vuLeft { {}, VuMeter::Mode::Level }, vuRight { {}, VuMeter::Mode::Level };
     Waterfall waterfall;
     MaskingMatrix matrix;
@@ -54,5 +60,6 @@ private:
     juce::Rectangle<int> listArea, spectrumArea, detailsArea;
     FoldButton listFold { "foldExList" }, detailsFold { "foldExDetails" };
     static constexpr int rowH = 22, headH = 22;
+    static constexpr int maxGlowCurves = 12;   // darüber: Analyzer-Kurven als einfache Linien
 };
 } // namespace ame::ui

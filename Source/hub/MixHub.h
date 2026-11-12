@@ -27,6 +27,18 @@ inline float getDisplayPointHz (int i) noexcept
 {
     return 20.0f * std::pow (1000.0f, (float) i / (float) (kNumDisplayPoints - 1));
 }
+// dieselben Frequenzen als Tabelle (Anzeige: nicht je Bild neu potenzieren)
+inline const std::array<float, kNumDisplayPoints>& getDisplayPointTable() noexcept
+{
+    static const auto table = []
+    {
+        std::array<float, kNumDisplayPoints> t {};
+        for (int i = 0; i < kNumDisplayPoints; ++i)
+            t[(size_t) i] = getDisplayPointHz (i);
+        return t;
+    }();
+    return table;
+}
 
 // Klangmerkmale für die Rollenerkennung (Langzeit-Mittel über aktive Frames)
 struct RoleFeatures
@@ -117,6 +129,7 @@ struct TrackSnapshot
     std::array<float, kNumDisplayPoints> displayDb {};
     float rmsLeftDb = -100.0f, rmsRightDb = -100.0f;
     bool hasAnalysis = false;
+    uint32_t blockCounter = 0;      // zählt die verarbeiteten Audio-Blöcke (steht = Host verarbeitet gerade nicht)
 
     std::array<float, kNumAdaptiveBands> appliedCutDb {};
     float appliedHpfHz = 0.0f, appliedGainDb = 0.0f;

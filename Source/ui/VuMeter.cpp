@@ -36,7 +36,19 @@ void VuMeter::update (float rmsDb, float peakDb, float dt)
     const float c = std::exp (-dt / 0.09f);   // ~300 ms Anstiegszeit (VU-Ballistik)
     needle = c * needle + (1.0f - c) * target;
     peakHold = peakDb > -1.0f ? 0.6f : juce::jmax (0.0f, peakHold - dt);
-    repaint();
+    repaintIfMoved();
+}
+
+void VuMeter::repaintIfMoved()
+{
+    // nur neu zeichnen, wenn sich der Zeiger sichtbar bewegt hat (~0,2 px) oder die Peak-Lampe umschaltet
+    const bool lamp = peakHold > 0.0f;
+    if (std::abs (needle - shownNeedle) > 0.0015f || lamp != shownLamp)
+    {
+        shownNeedle = needle;
+        shownLamp = lamp;
+        repaint();
+    }
 }
 
 void VuMeter::updateGainReduction (float grDb, float dt)
@@ -44,10 +56,10 @@ void VuMeter::updateGainReduction (float grDb, float dt)
     const float target = positionForGr (grDb);
     const float c = std::exp (-dt / 0.06f);
     needle = c * needle + (1.0f - c) * target;
-    repaint();
+    repaintIfMoved();
 }
 
-void VuMeter::paint (juce::Graphics& g)
+void VuMeter::paintScale (juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat().reduced (2.0f);
 
@@ -116,6 +128,19 @@ void VuMeter::paint (juce::Graphics& g)
     g.setFont (fonts::display (juce::jlimit (12.0f, 20.0f, face.getHeight() * 0.19f)));
     g.drawText (mode == Mode::Level ? "VU" : "GR", scaleArea.withTrimmedTop (scaleArea.getHeight() * 0.50f).withHeight (scaleArea.getHeight() * 0.26f),
                 juce::Justification::centred);
+}
+
+void VuMeter::paint (juce::Graphics& g)
+{
+    // Gehäuse, Skala und Beschriftung ändern sich nie: aus dem Bild; neu gezeichnet werden nur Zeiger und Lampe
+    scaleCache.draw (g, getLocalBounds(), false, [this] (juce::Graphics& sg) { paintScale (sg); });
+
+    const auto face = getLocalBounds().toFloat().reduced (2.0f).reduced (6.0f);
+    const auto scaleArea = face.withTrimmedBottom (16.0f);
+    const auto pivot = juce::Point<float> (scaleArea.getCentreX(), scaleArea.getBottom() + scaleArea.getHeight() * 0.22f);
+    const float radius = juce::jmin (scaleArea.getHeight() * 1.02f, scaleArea.getWidth() * 0.56f);
+    auto pointAt = [&] (float pos, float rr) { return pivot.getPointOnCircumference (rr, arcStart + pos * (arcEnd - arcStart)); };
+    const auto ink = juce::Colour (0xff2a1c10);
 
     // Zeiger
     {

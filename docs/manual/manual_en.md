@@ -1,6 +1,6 @@
 # AME – Adaptive Mix Exchange
 
-**Operating Manual · Version 1.1.0** · built by **Batze the bit builder**
+**Operating Manual · Version 1.1.1** · built by **Batze the bit builder**
 
 *Every track finds its aim.*
 
@@ -197,7 +197,7 @@ The table lists all Lines:
 ### Analyser, patchbay, VU
 On the left the line list and the analyser, on the right the **DETAILS** column with the patchbay, VU left/right and the spectrogram of the selected track. The list and DETAILS can be folded (triangle); the analyser then uses the space.
 
-- **Analyser**: all tracks as coloured areas, the **sum** as a cream line; with no selection the heat columns show the total occupancy per frequency.
+- **Analyser**: all tracks as coloured areas, the **sum** as a cream line; with no selection the heat columns show the total occupancy per frequency. With more than 12 lines the tracks are drawn as plain lines (clearer and faster); the selected track keeps its area.
 - **Patchbay**: matrix of all Lines – the row is masked by the column. Brighter = stronger. Click to select a track.
 - **VU Left/Right**: master level.
 
@@ -224,7 +224,7 @@ With **Auto-ID** AME detects the role by itself:
 2. **Sound** (after about 3 s of signal): centroid, tonality, fundamental, transients, vibrato, crest factor, stereo width. Shown as "→ Role (xx %)".
 3. **Hysteresis**: the role only changes with a clear lead (+15 %); below 25 % confidence it falls back to "Other".
 
-A manually selected role always wins.
+A manually selected role always wins. The sound analysis only runs with Auto-ID (saves CPU); after switching from a fixed role to Auto-ID it starts again and needs about 3 s of signal.
 
 ## How the engine works
 
@@ -308,7 +308,7 @@ Typical workflow: choose a program → let the song play a few times → compare
 
 ## About AME
 
-**AME – Adaptive Mix Exchange**, version 1.1.0
+**AME – Adaptive Mix Exchange**, version 1.1.1
 
 Built by **Batze the bit builder**.
 

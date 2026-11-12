@@ -36,10 +36,22 @@ private:
         const RoleProfile* profile = nullptr;
         std::array<float, kNumAnalysisBands> avg {}, fast {}, shapeRel {}, spreadAvg {}, prio {}, cut {};
         float maxDb = -200.0f, totalDb = -100.0f, reaction = 0.3f;
+        uint32_t analysisCounter = 0;       // Stand der Analyse, aus dem avg … spreadAvg stammen (0 = ungültig)
     };
 
+    void updatePriorityTable (Genre) noexcept;
+
     MixHub& hub;
-    std::array<T, kMaxSlots> ts;            // Arbeitsspeicher (vorab angelegt)
+    std::array<T, kMaxSlots> ts;            // Arbeitsspeicher je Slot (vorab angelegt)
+    std::array<int, kMaxSlots> order {};    // aktive Slots dieses Schritts
+
+    // Feste Tabellen (einmal berechnet statt je Schritt und Line): Bandmitten/-kanten, Oktavband → Analysebänder,
+    // Priorität je Rolle und Band für das aktuelle Programm
+    std::array<float, kNumAnalysisBands> bandCentreHz {};
+    std::array<float, kNumAnalysisBands + 1> bandEdgeHz {};
+    std::array<int, kNumAdaptiveBands> octFirst {}, octLast {};   // octLast < octFirst = kein Band
+    std::array<std::array<float, kNumAnalysisBands>, (size_t) Role::NumRoles> prioTable {};
+    int prioGenre = -1;
     std::array<float, kMaxSlots> gains {};
     std::array<int, kMaxSlots> active {};
     int intervalSamples = 960;

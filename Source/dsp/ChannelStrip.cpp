@@ -25,6 +25,12 @@ void ChannelStrip::prepare (double sampleRate, int numChannels)
     aHpfF.reset (sr, 0.05);
     aHpfF.setCurrentAndTargetValue (20.0f);
 
+    // Abtastrate kann sich geändert haben: alle Koeffizienten beim nächsten Block neu
+    hpfAppliedF = lpfAppliedF = deessApplied = -1.0f;
+    hpfAppliedSlope = lpfAppliedSlope = -1;
+    eqAppliedType.fill (-1);
+    panApplied = 100.0f;
+
     reset();
 }
 
@@ -67,16 +73,30 @@ void ChannelStrip::updateFilters (const Params& p) noexcept
     if (kBwStages[hs] != hpfStages) { hpfStages = kBwStages[hs]; for (auto& b : hpf) b.reset(); }
     if (kBwStages[ls] != lpfStages) { lpfStages = kBwStages[ls]; for (auto& b : lpf) b.reset(); }
 
-    if (p.hpfOn)
+    // Koeffizienten (sin/cos/pow) nur neu, wenn sich Frequenz, Güte, Gain, Typ oder Flanke geändert haben
+    if (p.hpfOn && (hf != hpfAppliedF || hs != hpfAppliedSlope))
+    {
         for (int i = 0; i < hpfStages; ++i)
             hpf[(size_t) i].setup (Biquad::Type::HighPass, sr, hf, kBwQ[hs][i], 0);
-    if (p.lpfOn)
+        hpfAppliedF = hf; hpfAppliedSlope = hs;
+    }
+    if (p.lpfOn && (lf != lpfAppliedF || ls != lpfAppliedSlope))
+    {
         for (int i = 0; i < lpfStages; ++i)
             lpf[(size_t) i].setup (Biquad::Type::LowPass, sr, lf, kBwQ[ls][i], 0);
+        lpfAppliedF = lf; lpfAppliedSlope = ls;
+    }
 
     const Biquad::Type types[4] { lowType (p.lowBell), Biquad::Type::Peak, Biquad::Type::Peak, highType (p.highBell) };
     for (size_t b = 0; b < 4; ++b)
-        eq[b].setup (types[b], sr, eqF[b].getNextValue(), eqQ[b].getNextValue(), eqG[b].getNextValue());
+    {
+        const float f = eqF[b].getNextValue(), q = eqQ[b].getNextValue(), g = eqG[b].getNextValue();
+        if (f != eqAppliedF[b] || q != eqAppliedQ[b] || g != eqAppliedG[b] || (int) types[b] != eqAppliedType[b])
+        {
+            eq[b].setup (types[b], sr, f, q, g);
+            eqAppliedF[b] = f; eqAppliedQ[b] = q; eqAppliedG[b] = g; eqAppliedType[b] = (int) types[b];
+        }
+    }
 }
 
 float ChannelStrip::getManualResponseDb (const Params& p, float hz, double rate) noexcept
@@ -104,6 +124,63 @@ float ChannelStrip::getManualResponseDb (const Params& p, float hz, double rate)
         db += b.getMagnitudeDb (hz, rate);
     }
     return db;
+}
+
+ChannelStrip::ManualResponse::ManualResponse (const Params& p, double sampleRate) noexcept : rate (sampleRate)
+{
+    const int hs = juce::jlimit (0, 2, p.hpfSlope), ls = juce::jlimit (0, 2, p.lpfSlope);
+    if (p.hpfOn)
+        for (int i = 0; i < kBwStages[hs]; ++i)
+            stages[(size_t) numStages++].setup (Biquad::Type::HighPass, rate, p.hpfFreq, kBwQ[hs][i], 0);
+    if (p.lpfOn)
+        for (int i = 0; i < kBwStages[ls]; ++i)
+            stages[(size_t) numStages++].setup (Biquad::Type::LowPass, rate, p.lpfFreq, kBwQ[ls][i], 0);
+
+    const Biquad::Type types[4] { lowType (p.lowBell), Biquad::Type::Peak, Biquad::Type::Peak, highType (p.highBell) };
+    for (size_t k = 0; k < 4; ++k)
+        stages[(size_t) numStages++].setup (types[k], rate, p.eqFreq[k], p.eqQ[k], p.eqGainDb[k]);
+}
+
+float ChannelStrip::ManualResponse::dbAt (float hz) const noexcept
+{
+    float db = 0.0f;
+    for (int i = 0; i < numStages; ++i)
+        db += stages[(size_t) i].getMagnitudeDb (hz, rate);
+    return db;
+}
+
+ChannelStrip::AdaptiveResponse::AdaptiveResponse (const std::array<float, kNumAdaptiveBands>& cutDb,
+                                                  float hpfHz, float gainDb) noexcept
+    : gain (gainDb), hpf (hpfHz >= 20.0f ? hpfHz : 0.0)
+{
+    for (int k = 0; k < kNumAdaptiveBands; ++k)
+    {
+        const double g = cutDb[(size_t) k];
+        if (g > -0.01) continue;
+        fc[(size_t) numBands] = getAdaptiveBandHz (k);
+        a2[(size_t) numBands] = std::pow (10.0, g / 20.0);
+        invA2[(size_t) numBands] = 1.0 / a2[(size_t) numBands];
+        ++numBands;
+    }
+}
+
+float ChannelStrip::AdaptiveResponse::dbAt (float freq) const noexcept
+{
+    // wie getAdaptiveResponseDb, die Beträge aller Bänder aber als Produkt (ein Logarithmus je Frequenz)
+    const double w = freq, q2 = kAdaptiveQ * kAdaptiveQ;
+    double ratio = 1.0;
+    for (int i = 0; i < numBands; ++i)
+    {
+        const double x = w / fc[(size_t) i] - fc[(size_t) i] / w;
+        const double t = x * x * q2;
+        ratio *= (t + a2[(size_t) i]) / (t + invA2[(size_t) i]);
+    }
+    if (hpf > 0.0)
+    {
+        const double r = hpf / w;
+        ratio /= 1.0 + r * r * r * r;
+    }
+    return (float) (gain + (ratio == 1.0 ? 0.0 : 10.0 * std::log10 (ratio)));
 }
 
 float ChannelStrip::saturate (int type, float x) noexcept
@@ -149,6 +226,12 @@ void ChannelStrip::updateAdaptiveFilters() noexcept
 namespace
 {
 inline float dbToGain (float db) noexcept  { return std::exp (db * 0.11512925465f); }      // ln(10)/20
+// wie dbToGain, ohne exp im Ruhezustand (0 dB = exakt 1)
+inline float dbToGain0 (float db) noexcept { return db == 0.0f ? 1.0f : dbToGain (db); }
+// Sicherheitsabstand für Schwellenvergleiche im linearen Bereich: nur eindeutige Fälle sparen den Logarithmus,
+// im Grenzbereich wird wie bisher in dB gerechnet (Ergebnis bleibt identisch)
+constexpr float kLinMargin = 0.02f;
+constexpr float kLinFloor = 2.0e-6f;   // gainToDb begrenzt bei 1e-6
 inline float gainToDb (float g) noexcept   { return 8.6858896381f * std::log (juce::jmax (g, 1.0e-6f)); }
 inline float coefFor (float ms, double sr) noexcept
 {
@@ -196,12 +279,16 @@ void ChannelStrip::processPre (juce::AudioBuffer<float>& buffer, const Params& p
     const float relFast = coefFor (40.0f, sr), relSlow = coefFor (1500.0f, sr), attSlow = coefFor (300.0f, sr);
     const float kneeDb = juce::jmax (0.0f, p.compKneeDb);
     const float slope = 1.0f / juce::jmax (1.0f, p.compRatio) - 1.0f;   // <= 0
+    // unterhalb davon (linear) arbeitet der Kompressor sicher nicht
+    const float compQuietLin = dbToGain (p.compThreshDb - (kneeDb < 0.1f ? 0.0f : kneeDb * 0.5f)) * (1.0f - kLinMargin);
+    const bool compQuietOk = compQuietLin > kLinFloor;
 
     // Gate
     const float gDetRel = coefFor (8.0f, sr);
     const float gAtt = coefFor (p.gateAttackMs, sr), gRel = coefFor (p.gateReleaseMs, sr);
     const int gHold = (int) (p.gateHoldMs * 0.001f * (float) sr);
     const float gRatio = p.gateMode == 2 ? 4.0f : 2.0f;
+    const float gThreshLin = dbToGain (p.gateThreshDb), gHystLin = dbToGain (p.gateThreshDb - 3.0f);
 
     // Sättigung
     const float satG = dbToGain (juce::jlimit (0.0f, 36.0f, p.satDriveDb)), satInv = 1.0f / satG;
@@ -217,6 +304,8 @@ void ChannelStrip::processPre (juce::AudioBuffer<float>& buffer, const Params& p
     // De-Esser
     const float dDetRel = coefFor (15.0f, sr);
     const float dAtt = coefFor (1.0f, sr), dRel = coefFor (80.0f, sr);
+    const float dQuietLin = dbToGain (p.deessThreshDb) * (1.0f - kLinMargin);
+    const bool dQuietOk = dQuietLin > kLinFloor;
 
     for (int start = 0; start < numSamples; start += kSubBlock)
     {
@@ -228,10 +317,14 @@ void ChannelStrip::processPre (juce::AudioBuffer<float>& buffer, const Params& p
         if (p.deessOn)
         {
             const float f = deessF.getNextValue();
-            deessHp.setup (Biquad::Type::HighPass, sr, f, 0.7071, 0);
-            deessHp2.setup (Biquad::Type::HighPass, sr, f, 0.7071, 0);
-            deessLp.setup (Biquad::Type::LowPass, sr, f, 0.7071, 0);
-            deessLp2.setup (Biquad::Type::LowPass, sr, f, 0.7071, 0);
+            if (f != deessApplied)
+            {
+                deessHp.setup (Biquad::Type::HighPass, sr, f, 0.7071, 0);
+                deessHp2.setup (Biquad::Type::HighPass, sr, f, 0.7071, 0);
+                deessLp.setup (Biquad::Type::LowPass, sr, f, 0.7071, 0);
+                deessLp2.setup (Biquad::Type::LowPass, sr, f, 0.7071, 0);
+                deessApplied = f;
+            }
         }
         deessF.skip (len - 1);
 
@@ -253,19 +346,29 @@ void ChannelStrip::processPre (juce::AudioBuffer<float>& buffer, const Params& p
                 if (gateScOn) { dl = gateSc.process (l, 0); if (R) dr = gateSc.process (r, 1); }
                 const float det = juce::jmax (std::abs (dl), R ? std::abs (dr) : 0.0f);
                 gateDetEnv = juce::jmax (det, gateDetEnv * gDetRel);
-                const float levelDb = gainToDb (gateDetEnv);
 
                 float target = 0.0f;
                 bool above;
                 if (p.gateMode == 0)
                 {
-                    gateOpen = levelDb > p.gateThreshDb - (gateOpen ? 3.0f : 0.0f);   // 3 dB Hysterese
+                    // 3 dB Hysterese; eindeutige Fälle linear, nur im Grenzbereich in dB
+                    const float lin = gateOpen ? gHystLin : gThreshLin;
+                    if (gateDetEnv > lin * (1.0f + kLinMargin))
+                        gateOpen = true;
+                    else if (gateDetEnv < lin * (1.0f - kLinMargin) && lin * (1.0f - kLinMargin) > kLinFloor)
+                        gateOpen = false;
+                    else
+                        gateOpen = gainToDb (gateDetEnv) > p.gateThreshDb - (gateOpen ? 3.0f : 0.0f);
                     above = gateOpen;
                     target = gateOpen ? 0.0f : -p.gateRangeDb;
                 }
+                else if (gateDetEnv > gThreshLin * (1.0f + kLinMargin))
+                {
+                    above = true;
+                }
                 else
                 {
-                    const float below = p.gateThreshDb - levelDb;
+                    const float below = p.gateThreshDb - gainToDb (gateDetEnv);
                     above = below <= 0.0f;
                     target = above ? 0.0f : -juce::jmin (p.gateRangeDb, below * (gRatio - 1.0f));
                 }
@@ -280,7 +383,7 @@ void ChannelStrip::processPre (juce::AudioBuffer<float>& buffer, const Params& p
                 else
                     gateGainDb = gRel * gateGainDb + (1.0f - gRel) * target;
 
-                const float g = dbToGain (gateGainDb);
+                const float g = dbToGain0 (gateGainDb);
                 l *= g; r *= g;
             }
             else
@@ -300,7 +403,7 @@ void ChannelStrip::processPre (juce::AudioBuffer<float>& buffer, const Params& p
                 runEq();
 
             // --- Kompressor ---
-            const float mk = dbToGain (makeup.getNextValue());
+            const float mkNow = makeup.getNextValue();
             const float mix = compMixS.getNextValue();
 
             if (p.compOn)
@@ -308,15 +411,18 @@ void ChannelStrip::processPre (juce::AudioBuffer<float>& buffer, const Params& p
                 float dl = l, dr = r;
                 if (compScOn) { dl = compSc.process (l, 0); if (R) dr = compSc.process (r, 1); }
                 const float level = juce::jmax (std::abs (dl), R ? std::abs (dr) : 0.0f);
-                const float over = gainToDb (level) - p.compThreshDb;
 
                 float target = 0.0f;   // positive Gain Reduction in dB
-                if (kneeDb < 0.1f)
-                    target = over > 0.0f ? -slope * over : 0.0f;
-                else if (2.0f * over > kneeDb)
-                    target = -slope * over;
-                else if (2.0f * over > -kneeDb)
-                    target = -slope * (over + kneeDb * 0.5f) * (over + kneeDb * 0.5f) / (2.0f * kneeDb);
+                if (! (compQuietOk && level < compQuietLin))   // sicher unter dem Einsatzpunkt: kein Logarithmus nötig
+                {
+                    const float over = gainToDb (level) - p.compThreshDb;
+                    if (kneeDb < 0.1f)
+                        target = over > 0.0f ? -slope * over : 0.0f;
+                    else if (2.0f * over > kneeDb)
+                        target = -slope * over;
+                    else if (2.0f * over > -kneeDb)
+                        target = -slope * (over + kneeDb * 0.5f) * (over + kneeDb * 0.5f) / (2.0f * kneeDb);
+                }
 
                 if (p.compAutoRelease)
                 {
@@ -332,7 +438,8 @@ void ChannelStrip::processPre (juce::AudioBuffer<float>& buffer, const Params& p
                     compFastDb = compSlowDb = compEnvDb;
                 }
 
-                const float g = dbToGain (-compEnvDb) * mk;
+                if (mkNow != mkDb) { mkDb = mkNow; mkGain = dbToGain (mkNow); }
+                const float g = dbToGain0 (-compEnvDb) * mkGain;
                 const float wl = l * g, wr = r * g;
                 l += mix * (wl - l);
                 r += mix * (wr - r);
@@ -354,11 +461,15 @@ void ChannelStrip::processPre (juce::AudioBuffer<float>& buffer, const Params& p
                 const float hr = R ? deessHp2.process (deessHp.process (r, 1), 1) : 0.0f;
                 const float det = juce::jmax (std::abs (hl), std::abs (hr));
                 deessDetEnv = juce::jmax (det, deessDetEnv * dDetRel);
-                const float over = gainToDb (deessDetEnv) - p.deessThreshDb;
-                const float target = over > 0.0f ? juce::jmin (p.deessRangeDb, over * 0.75f) : 0.0f;   // 4:1
+                float target = 0.0f;
+                if (! (dQuietOk && deessDetEnv < dQuietLin))
+                {
+                    const float over = gainToDb (deessDetEnv) - p.deessThreshDb;
+                    target = over > 0.0f ? juce::jmin (p.deessRangeDb, over * 0.75f) : 0.0f;   // 4:1
+                }
                 const float c = target > deessRedDb ? dAtt : dRel;
                 deessRedDb = c * deessRedDb + (1.0f - c) * target;
-                const float g = dbToGain (-deessRedDb);
+                const float g = dbToGain0 (-deessRedDb);
 
                 if (p.deessListen)      { l = hl; r = hr; }
                 else if (p.deessWide)   { l *= g; r *= g; }
@@ -488,11 +599,15 @@ void ChannelStrip::processPost (juce::AudioBuffer<float>& buffer, const Params& 
                 r = m - s;
 
                 // Pan-Law: Mitte 0 dB, außen -inf / 0 dB
-                const float angle = (pan + 1.0f) * juce::MathConstants<float>::pi * 0.25f;
-                const float gl = juce::jmin (1.0f, juce::MathConstants<float>::sqrt2 * std::cos (angle));
-                const float gr = juce::jmin (1.0f, juce::MathConstants<float>::sqrt2 * std::sin (angle));
-                l *= gl * gOut;
-                r *= gr * gOut;
+                if (pan != panApplied)
+                {
+                    const float angle = (pan + 1.0f) * juce::MathConstants<float>::pi * 0.25f;
+                    panGl = juce::jmin (1.0f, juce::MathConstants<float>::sqrt2 * std::cos (angle));
+                    panGr = juce::jmin (1.0f, juce::MathConstants<float>::sqrt2 * std::sin (angle));
+                    panApplied = pan;
+                }
+                l *= panGl * gOut;
+                r *= panGr * gOut;
             }
             else
             {

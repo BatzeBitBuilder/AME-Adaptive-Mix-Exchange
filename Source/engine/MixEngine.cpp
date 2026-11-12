@@ -20,7 +20,42 @@ constexpr float spreadDb = 6.0f;
 float dbToPow (float db) { return std::pow (10.0f, db * 0.1f); }
 } // namespace
 
-MixEngine::MixEngine (MixHub& h) : hub (h) {}
+MixEngine::MixEngine (MixHub& h) : hub (h)
+{
+    for (int b = 0; b < B; ++b)
+        bandCentreHz[(size_t) b] = SpectrumAnalyzer::getBandCentreHz (b);
+    for (int b = 0; b <= B; ++b)
+        bandEdgeHz[(size_t) b] = SpectrumAnalyzer::getBandEdgeHz (b);
+
+    // Analysebänder, deren Mitte in das jeweilige Oktavband fällt (zusammenhängend)
+    for (int k = 0; k < kNumAdaptiveBands; ++k)
+    {
+        const float fc = getAdaptiveBandHz (k);
+        octFirst[(size_t) k] = 0;
+        octLast[(size_t) k] = -1;
+        bool any = false;
+        for (int b = 0; b < B; ++b)
+        {
+            const float f = bandCentreHz[(size_t) b];
+            if (f >= fc / juce::MathConstants<float>::sqrt2 && f < fc * juce::MathConstants<float>::sqrt2)
+            {
+                if (! any) { octFirst[(size_t) k] = b; any = true; }
+                octLast[(size_t) k] = b;
+            }
+        }
+    }
+}
+
+void MixEngine::updatePriorityTable (Genre genre) noexcept
+{
+    for (int r = 0; r < (int) Role::NumRoles; ++r)
+    {
+        const auto& profile = getRoleProfile (genre, (Role) r);
+        for (int b = 0; b < B; ++b)
+            prioTable[(size_t) r][(size_t) b] = getPriorityAt (profile, bandCentreHz[(size_t) b]);
+    }
+    prioGenre = (int) genre;
+}
 
 void MixEngine::prepare (double sampleRate) noexcept
 {
@@ -42,22 +77,37 @@ void MixEngine::step() noexcept
 {
     const auto genre = (Genre) juce::jlimit (0, (int) Genre::NumGenres - 1, hub.globalGenre.load());
     const auto gp = getGenreProfile (genre);
+    if (prioGenre != (int) genre)
+        updatePriorityTable (genre);
 
     int n = 0;
     for (int slot = 0; slot < kMaxSlots; ++slot)
     {
         auto* s = hub.getAudioData (slot);
-        if (s->engMode.load (std::memory_order_acquire) != (int) InstanceMode::Track
-             || s->analysisCounter.load (std::memory_order_acquire) == 0)
+        auto& t = ts[(size_t) slot];
+        // Zähler vor den Daten lesen: kommt während des Lesens ein neuer Hop, wird im nächsten Schritt neu gelesen
+        const auto counter = s->analysisCounter.load (std::memory_order_acquire);
+        if (s->engMode.load (std::memory_order_acquire) != (int) InstanceMode::Track || counter == 0)
+        {
+            t.analysisCounter = 0;
             continue;
+        }
 
-        auto& t = ts[(size_t) n++];
+        order[(size_t) n++] = slot;
         t.slot = slot;
-        t.profile = &getRoleProfile (genre, (Role) s->engRole.load (std::memory_order_relaxed));
+        const int role = juce::jlimit (0, (int) Role::NumRoles - 1, s->engRole.load (std::memory_order_relaxed));
+        t.profile = &getRoleProfile (genre, (Role) role);
         t.reaction = juce::jlimit (0.0f, 1.0f, s->reaction.load (std::memory_order_relaxed));
-        t.maxDb = -200.0f;
         t.cut.fill (0.0f);
         const float prioOffset = s->priorityOffset.load (std::memory_order_relaxed);
+        for (int b = 0; b < B; ++b)
+            t.prio[(size_t) b] = juce::jlimit (0.0f, 1.5f, prioTable[(size_t) role][(size_t) b] + prioOffset);
+
+        // Spektren ändern sich nur je Analyse-Hop (~23/s), die Engine rechnet 50-mal je Sekunde
+        if (t.analysisCounter == counter)
+            continue;
+        t.analysisCounter = counter;
+        t.maxDb = -200.0f;
 
         float pow = 0.0f;
         for (int b = 0; b < B; ++b)
@@ -66,8 +116,6 @@ void MixEngine::step() noexcept
             t.fast[(size_t) b] = s->bandDb[(size_t) b].load (std::memory_order_relaxed);
             t.maxDb = juce::jmax (t.maxDb, t.avg[(size_t) b]);
             if (t.avg[(size_t) b] > floorDb) pow += dbToPow (t.avg[(size_t) b]);
-            t.prio[(size_t) b] = juce::jlimit (0.0f, 1.5f, getPriorityAt (*t.profile, SpectrumAnalyzer::getBandCentreHz (b))
-                                                          + prioOffset);
         }
         t.totalDb = 10.0f * std::log10 (pow + 1.0e-12f);
 
@@ -87,11 +135,11 @@ void MixEngine::step() noexcept
     // --- Absenkungen: L (niedrigere Priorität) weicht H aus, wo beide im selben Band konkurrieren ---
     for (int l = 0; l < n; ++l)
     {
-        auto& L = ts[(size_t) l];
+        auto& L = ts[(size_t) order[(size_t) l]];
         for (int h = 0; h < n; ++h)
         {
             if (h == l) continue;
-            const auto& H = ts[(size_t) h];
+            const auto& H = ts[(size_t) order[(size_t) h]];
 
             for (int b = 0; b < B; ++b)
             {
@@ -124,12 +172,12 @@ void MixEngine::step() noexcept
         int numActive = 0;
         float powBefore = 0.0f;
         for (int i = 0; i < n; ++i)
-            if (ts[(size_t) i].totalDb > -60.0f) { active[(size_t) numActive++] = i; powBefore += dbToPow (ts[(size_t) i].totalDb); }
+            if (ts[(size_t) order[(size_t) i]].totalDb > -60.0f) { active[(size_t) numActive++] = i; powBefore += dbToPow (ts[(size_t) order[(size_t) i]].totalDb); }
 
         if (numActive > 1)
         {
             float targetPow = 0.0f;
-            for (int a = 0; a < numActive; ++a) targetPow += dbToPow (ts[(size_t) active[(size_t) a]].profile->levelDb);
+            for (int a = 0; a < numActive; ++a) targetPow += dbToPow (ts[(size_t) order[(size_t) active[(size_t) a]]].profile->levelDb);
             float ref = 10.0f * std::log10 (powBefore / targetPow);
 
             for (int iter = 0; iter < 4; ++iter)
@@ -138,7 +186,7 @@ void MixEngine::step() noexcept
                 for (int a = 0; a < numActive; ++a)
                 {
                     const int i = active[(size_t) a];
-                    const auto& t = ts[(size_t) i];
+                    const auto& t = ts[(size_t) order[(size_t) i]];
                     gains[(size_t) i] = juce::jlimit (-gp.maxGainDb, gp.maxGainDb, ref + t.profile->levelDb - t.totalDb);
                     powAfter += dbToPow (t.totalDb + gains[(size_t) i]);
                 }
@@ -152,7 +200,7 @@ void MixEngine::step() noexcept
     // --- Ausgabe ---
     for (int ti = 0; ti < n; ++ti)
     {
-        const auto& t = ts[(size_t) ti];
+        const auto& t = ts[(size_t) order[(size_t) ti]];
         auto* d = hub.getAudioData (t.slot);
         if (d == nullptr) continue;
 
@@ -168,14 +216,9 @@ void MixEngine::step() noexcept
         // auf Oktavbänder abbilden
         for (int k = 0; k < kNumAdaptiveBands; ++k)
         {
-            const float fc = getAdaptiveBandHz (k);
             float sum = 0.0f; int cnt = 0;
-            for (int b = 0; b < B; ++b)
-            {
-                const float f = SpectrumAnalyzer::getBandCentreHz (b);
-                if (f >= fc / juce::MathConstants<float>::sqrt2 && f < fc * juce::MathConstants<float>::sqrt2)
-                { sum += sm[(size_t) b]; ++cnt; }
-            }
+            for (int b = octFirst[(size_t) k]; b <= octLast[(size_t) k]; ++b)
+            { sum += sm[(size_t) b]; ++cnt; }
             const float c = cnt > 0 ? sum / (float) cnt : 0.0f;
             d->targetCutDb[(size_t) k].store (-gp.maxCutDb * c, std::memory_order_relaxed);
         }
@@ -186,7 +229,7 @@ void MixEngine::step() noexcept
         {
             if (t.avg[(size_t) b] > t.maxDb - 30.0f)
             {
-                hpf = juce::jmin (t.profile->hpfMaxHz, SpectrumAnalyzer::getBandEdgeHz (b) * 0.8f);
+                hpf = juce::jmin (t.profile->hpfMaxHz, bandEdgeHz[(size_t) b] * 0.8f);
                 break;
             }
         }

@@ -423,6 +423,15 @@ void MainView::timerCallback()
 
 void MainView::paint (juce::Graphics& g)
 {
+    // Maserung und Lackstruktur sind aufwendig (rund 1700 Zeichenschritte) und ändern sich nur mit der Größe
+    backdrop.draw (g, getLocalBounds(), true, [this] (juce::Graphics& bg) { paintBackdrop (bg); });
+
+    if (g.getClipBounds().intersects (logoArea))
+        paintLogo (g);   // Lampen LINE / ENGINE / HOLD
+}
+
+void MainView::paintBackdrop (juce::Graphics& g)
+{
     const auto b = getLocalBounds().toFloat();
 
     // Walnuss-Gehäuse mit Maserung
@@ -466,8 +475,6 @@ void MainView::paint (juce::Graphics& g)
         }
     }
 
-    paintLogo (g);
-
     if (! learnBar.isEmpty())
         ame::ui::drawEngravedPanel (g, learnBar.toFloat(), {});
 
@@ -479,6 +486,7 @@ void MainView::paint (juce::Graphics& g)
 
 void MainView::resized()
 {
+    backdrop.invalidate();   // Mitschnitt-Leiste hängt vom Modus ab
     auto area = getLocalBounds().withTrimmedLeft (cheek).withTrimmedRight (cheek);
     auto header = area.removeFromTop (headerH).reduced (14, 8);
     area.reduce (8, 6);
@@ -652,6 +660,23 @@ void AmeEditor::setUiScale (float s)
     s = juce::jlimit (0.5f, 2.0f, s);
     setSize (juce::roundToInt ((float) MainView::baseWidth * s), juce::roundToInt ((float) MainView::baseHeight * s));
     ame::settings::set ("uiScale", juce::String (s, 3));
+    scaleSavePending = false;
+}
+
+void AmeEditor::timerCallback()
+{
+    fitToScreen();
+    saveScaleIfPending (false);
+}
+
+void AmeEditor::saveScaleIfPending (bool force)
+{
+    // beim Ziehen der Ecke ändert sich die Größe mit jedem Mausschritt: Datei erst danach schreiben
+    if (scaleSavePending && (force || juce::Time::getMillisecondCounter() - scaleChangedMs > 400))
+    {
+        scaleSavePending = false;
+        ame::settings::set ("uiScale", juce::String (scale, 3));
+    }
 }
 
 void AmeEditor::fitToScreen()
@@ -675,7 +700,10 @@ void AmeEditor::fitToScreen()
     setSize (juce::roundToInt ((float) MainView::baseWidth * fit), juce::roundToInt ((float) MainView::baseHeight * fit));
 }
 
-AmeEditor::~AmeEditor() = default;
+AmeEditor::~AmeEditor()
+{
+    saveScaleIfPending (true);
+}
 
 void AmeEditor::resized()
 {
@@ -688,6 +716,13 @@ void AmeEditor::resized()
     {
         scale = s;
         if (isShowing() && ! autoFitting)   // nur Änderungen durch den Nutzer merken
-            ame::settings::set ("uiScale", juce::String (s, 3));
+        {
+            scaleSavePending = true;
+            scaleChangedMs = juce::Time::getMillisecondCounter();
+        }
+        else if (autoFitting)
+        {
+            scaleSavePending = false;   // automatische Verkleinerung ist keine Nutzerwahl
+        }
     }
 }

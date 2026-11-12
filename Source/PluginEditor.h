@@ -45,6 +45,8 @@ private:
     static void refillCombo (juce::ComboBox&, const juce::StringArray&);
     void updateVisibility();
     void paintLogo (juce::Graphics&);
+    void paintBackdrop (juce::Graphics&);   // Gehäuse, Front, Schrauben: statisch, als Bild gehalten
+    ame::ui::BackdropCache backdrop;
 
     AmeProcessor& proc;
     ame::ui::AmeLookAndFeel lnf;
@@ -102,11 +104,14 @@ public:
     void fitToScreen();                        // verkleinert, falls größer als die Arbeitsfläche des Monitors
 
 private:
-    void timerCallback() override { fitToScreen(); }
+    void timerCallback() override;
+    void saveScaleIfPending (bool force);
 
     MainView view;
     float scale = 1.0f;
     bool autoFitting = false;   // automatische Verkleinerung nicht als Nutzerwahl speichern
+    bool scaleSavePending = false;   // Größe erst speichern, wenn das Ziehen der Ecke zur Ruhe gekommen ist
+    juce::uint32 scaleChangedMs = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AmeEditor)
 };

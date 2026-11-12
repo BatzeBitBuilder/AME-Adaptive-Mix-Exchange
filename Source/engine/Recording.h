@@ -54,5 +54,12 @@ private:
     std::unique_ptr<std::atomic<int16_t>[]> storage;
     std::atomic<std::atomic<int16_t>*> data { nullptr };
     std::atomic<int> numFrames { 0 };   // höchster gültiger Frame + 1
+
+    // Änderungszähler + zuletzt erzeugte Fassung: der Host fragt den Projektzustand oft ab,
+    // gepackt wird nur, wenn sich der Mitschnitt seitdem geändert hat
+    std::atomic<uint32_t> revision { 1 };
+    mutable juce::CriticalSection cacheLock;   // nie im Audio-Thread
+    mutable juce::String cachedBase64;
+    mutable uint32_t cachedRevision = 0;
 };
 } // namespace ame

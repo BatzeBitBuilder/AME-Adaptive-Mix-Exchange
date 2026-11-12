@@ -61,6 +61,7 @@ cmake -B build -A x64 -DAME_BUILD_TESTS=ON
 cmake --build build --config Release --target AMESmokeTest
 build\AMESmokeTest_artefacts\Release\AMESmokeTest.exe
 ```
+Benchmark (CPU cost of audio path, engine, project state and UI): `AMESmokeTest.exe --bench <folder>`.
 
 Release builds are produced by GitHub Actions (`.github/workflows/release.yml`).
 

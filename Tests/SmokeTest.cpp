@@ -11,6 +11,8 @@
 #include "RoleSignals.h"
 #include "Settings.h"
 #include "engine/StripPresets.h"
+#include "engine/MixEngine.h"
+#include "Bench.h"
 
 using namespace ame;
 
@@ -472,6 +474,13 @@ int main (int argc, char** argv)
 
     if (argc > 1 && juce::String (argv[1]) == "--hub-child")
         return runHubChild();
+
+    // Benchmark: AMESmokeTest --bench <folder>
+    if (argc > 1 && juce::String (argv[1]) == "--bench")
+    {
+        ame::i18n::setLanguageForTesting (ame::i18n::Language::German);
+        return bench::run (argc > 2 ? juce::File (argv[2]) : juce::File::getCurrentWorkingDirectory());
+    }
 
     const juce::File outDir = argc > 1 ? juce::File (argv[1]) : juce::File::getCurrentWorkingDirectory();
     ame::i18n::setLanguageForTesting (ame::i18n::Language::German);
@@ -1106,6 +1115,83 @@ int main (int argc, char** argv)
     std::cout << "Rollenerkennung:\n";
     testRoleDetection();
     testStripModules();
+
+    // --- 1.1.1: Performance-Umbauten dürfen nichts am Ergebnis ändern ---
+    {
+        // Mitschnitt: gepackte Fassung wird wiederverwendet, aber nie veraltet ausgeliefert
+        AdaptiveRecording rec;
+        rec.allocate();
+        AdaptiveRecording::Values v;
+        v.gainDb = 1.0f;
+        rec.write (0.0, 1.0, v);
+        const auto first = rec.toBase64();
+        CHECK (first.isNotEmpty() && first == rec.toBase64());
+        v.gainDb = 2.0f;
+        rec.write (1.0, 1.0, v);
+        const auto second = rec.toBase64();
+        CHECK (second != first);
+        AdaptiveRecording copy;
+        CHECK (copy.fromBase64 (second));
+        CHECK (copy.toBase64() == second);
+        AdaptiveRecording::Values back;
+        CHECK (copy.read (1.5, back) && std::abs (back.gainDb - 2.0f) < 0.011f);
+        rec.clear();
+        CHECK (rec.toBase64().isEmpty());
+
+        // Klangmerkmale ruhen bei fester Rolle und beginnen beim Einschalten neu; das Spektrum läuft immer
+        auto slotData = std::make_unique<SlotAudioData>();
+        SpectrumAnalyzer an;
+        an.prepare (48000.0);
+        juce::AudioBuffer<float> buf (2, 512);
+        auto feed = [&] (int blocks)
+        {
+            static double ph = 0.0;
+            for (int b = 0; b < blocks; ++b)
+            {
+                for (int i = 0; i < 512; ++i)
+                {
+                    const float x = 0.3f * (float) std::sin (juce::MathConstants<double>::twoPi * 220.0 * ph);
+                    ph += 1.0 / 48000.0;
+                    buf.setSample (0, i, x);
+                    buf.setSample (1, i, x);
+                }
+                an.process (buf, slotData.get());
+            }
+        };
+        an.setFeaturesEnabled (false);
+        feed (200);
+        CHECK (slotData->analysisCounter.load() > 20);
+        CHECK (slotData->fActiveSec.load() == 0.0f);
+        CHECK (slotData->bandDb[10].load() > -100.0f);
+        an.setFeaturesEnabled (true);
+        feed (200);
+        CHECK (slotData->fActiveSec.load() > 1.5f);
+        CHECK (slotData->fHarmonicity.load() > 0.8f);   // Sinus = tonal
+        an.setFeaturesEnabled (false);
+        an.setFeaturesEnabled (true);
+        feed (1);
+        CHECK (slotData->fActiveSec.load() < 0.5f);
+
+        // Anzeige-Frequenzgänge: schnelle Fassung = bisherige Berechnung
+        ChannelStrip::Params sp;
+        sp.hpfOn = sp.lpfOn = true; sp.hpfFreq = 120.0f; sp.lpfFreq = 9000.0f; sp.hpfSlope = 2; sp.lpfSlope = 0;
+        sp.eqGainDb = { 4.0f, -6.0f, 3.0f, -2.0f }; sp.lowBell = true;
+        const ChannelStrip::ManualResponse manual (sp, 48000.0);
+        std::array<float, kNumAdaptiveBands> cuts {};
+        for (size_t k = 0; k < cuts.size(); ++k) cuts[k] = k % 3 == 0 ? 0.0f : -1.5f * (float) k;
+        const ChannelStrip::AdaptiveResponse adaptive (cuts, 70.0f, 1.5f), flat ({}, 0.0f, 0.0f);
+        float maxDiff = 0.0f;
+        for (int i = 0; i < kNumDisplayPoints; ++i)
+        {
+            const float hz = getDisplayPointHz (i);
+            CHECK (std::abs (getDisplayPointTable()[(size_t) i] - hz) < 1.0e-3f);
+            maxDiff = juce::jmax (maxDiff, std::abs (manual.dbAt (hz) - ChannelStrip::getManualResponseDb (sp, hz, 48000.0)),
+                                  std::abs (adaptive.dbAt (hz) - ChannelStrip::getAdaptiveResponseDb (cuts, 70.0f, 1.5f, hz)),
+                                  std::abs (flat.dbAt (hz)));
+        }
+        std::cout << "Anzeige-Frequenzgang schnell/bisher: max. Abweichung " << maxDiff << " dB\n";
+        CHECK (maxDiff < 1.0e-3f);
+    }
 
     std::cout << (failures == 0 ? "OK" : "FEHLER: " + std::to_string (failures)) << "\n";
     return failures == 0 ? 0 : 1;

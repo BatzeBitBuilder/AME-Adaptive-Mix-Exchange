@@ -36,6 +36,7 @@ void AdaptiveRecording::clear()
             d[i].store (kInvalid, std::memory_order_relaxed);
     }
     numFrames.store (0);
+    revision.fetch_add (1, std::memory_order_relaxed);
 }
 
 bool AdaptiveRecording::frameValid (int f) const noexcept
@@ -77,6 +78,7 @@ void AdaptiveRecording::write (double startSec, double durationSec, const Values
 
     if (last + 1 > numFrames.load (std::memory_order_relaxed))
         numFrames.store (last + 1, std::memory_order_relaxed);
+    revision.fetch_add (1, std::memory_order_relaxed);
 }
 
 bool AdaptiveRecording::read (double timeSec, Values& v) const noexcept
@@ -118,6 +120,11 @@ juce::String AdaptiveRecording::toBase64() const
     if (d == nullptr || frames == 0)
         return {};
 
+    const juce::ScopedLock sl (cacheLock);
+    const auto rev = revision.load (std::memory_order_relaxed);   // vor dem Lesen: spätere Änderungen packen neu
+    if (rev == cachedRevision && cachedBase64.isNotEmpty())
+        return cachedBase64;
+
     juce::MemoryOutputStream raw;
     raw.writeInt (frames);
     for (size_t i = 0; i < (size_t) frames * kValues; ++i)
@@ -129,7 +136,9 @@ juce::String AdaptiveRecording::toBase64() const
         gz.write (raw.getData(), raw.getDataSize());
         gz.flush();
     }
-    return zipped.getMemoryBlock().toBase64Encoding();
+    cachedBase64 = zipped.getMemoryBlock().toBase64Encoding();
+    cachedRevision = rev;
+    return cachedBase64;
 }
 
 bool AdaptiveRecording::fromBase64 (const juce::String& s)
@@ -154,6 +163,7 @@ bool AdaptiveRecording::fromBase64 (const juce::String& s)
     for (size_t i = 0; i < (size_t) frames * kValues; ++i)
         d[i].store ((int16_t) in.readShort(), std::memory_order_relaxed);
     numFrames.store (frames);
+    revision.fetch_add (1, std::memory_order_relaxed);
     return true;
 }
 } // namespace ame
