@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.0 – 2026-11-12 (handling)
+Includes the performance work of 1.1.1 (not released separately). The audio path is unchanged: output and engine targets are still bit-identical to 1.1.0.
+
+- **Mix overview – line list scrolls**: mouse wheel or scroll bar; the “+ n more” line is gone
+- **Mix overview – remote switches per Line**: **D** (Direct), **H** (Hold) and **Prio** (priority, click opens the choice) in every row. They operate that Line from the Exchange or from any other Line's overview, also across plug-in processes; the Line applies the change with its next timer tick (about 0.1 s) as a normal parameter change. The [DIR]/[HOLD] text prefix in the ADAPTIVE column is replaced by the switches
+- **Clip lamps**: latching **CLIP** lamp at INPUT and OUTPUT of a Line (0 dBFS reached, click to reset); in the mix overview a red field at the end of the level chain of every Line and of the Exchange sum (click to reset)
+- **EQ graph**: pointing at or dragging a point shows its values (frequency, gain, Q or slope); **HP** and **LP** are visible as dark points when off, double-click switches them on/off
+- **Analyser in the mix overview**: pointing at a curve highlights it and shows name and role; a click selects the track
+- **Knobs**: drag with Shift held for fine adjustment (six times the travel). Double-click to the default value already worked and is now documented
+- Hub layout v5 (remote command, priority step, Direct switch and clip flags per slot)
+- Manual DE/EN updated; smoke test: remote switches, clip flags, EQ graph (high-pass by double-click) and analyser hover via synthetic mouse events, screenshots `ui_eq_readout`, `ui_overview_hover`
+
 ## 1.1.1 – 2026-11-12 (performance)
 No change to the sound: the audio output and the engine targets are bit-identical to 1.1.0 (compared sample by sample in the benchmark, including moving parameters). Figures: Linux build, 48 kHz, 512-sample blocks, one core; your machine will differ, the ratios should not.
 

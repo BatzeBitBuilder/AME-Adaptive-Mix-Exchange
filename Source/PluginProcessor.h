@@ -107,6 +107,7 @@ private:
     // Mitschnitt
     ame::AdaptiveRecording recording;
     uint32_t lastLearnCommandGen = 0;
+    uint32_t lastRemoteGen = 0;   // Fernbedienung aus der Mix-Übersicht
     bool lastReplay = false;
 
     // Export erkennen, auch ohne Offline-Kennung des Hosts: Audio läuft deutlich schneller als Echtzeit

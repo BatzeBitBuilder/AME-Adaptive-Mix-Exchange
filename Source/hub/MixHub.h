@@ -97,6 +97,17 @@ struct SlotAudioData
     std::atomic<bool> learnActive { false };
     std::atomic<uint32_t> renderWarnMs { 0 };   // Zeitpunkt (ms-Zähler): schneller Export ohne Engine-Daten
 
+    // Fernbedienung aus der Mix-Übersicht (beliebige Instanz → diese Line): die Line reagiert im Timer,
+    // wenn sich die Generation ändert (wie "Hold (alle)", aber je Line)
+    std::atomic<uint32_t> remoteGen { 0 };
+    std::atomic<int> remoteParam { 0 };       // MixHub::RemoteParam
+    std::atomic<float> remoteValue { 0.0f };
+    std::atomic<int> priorityIndex { 0 };     // Vorrang-Stufe der Line (Anzeige in der Übersicht)
+    std::atomic<bool> directSwitch { false }; // Schalter "Direkt" der Line selbst (bypassed gilt auch bei Abhöre "Ohne Amt")
+
+    // Übersteuerung (>= 0 dBFS) am Eingang / Ausgang seit dem letzten Zurücksetzen (die Anzeige setzt zurück)
+    std::atomic<bool> clipIn { false }, clipOut { false };
+
     // Klangmerkmale (SpectrumAnalyzer)
     std::atomic<float> fCentroid { 0 }, fFlatness { 0 }, fSub { 0 }, fLow { 0 }, fHigh { 0 }, fOnsetRate { 0 },
                        fHarmonicity { 0 }, fPitch { 0 }, fPitchVar { 0 }, fCrest { 0 }, fWidth { 0 }, fActiveSec { 0 };
@@ -135,6 +146,9 @@ struct TrackSnapshot
     float appliedHpfHz = 0.0f, appliedGainDb = 0.0f;
     float priorityOffset = 0.0f, reaction = 0.3f;
     bool frozen = false, bypassed = false;
+    int priorityIndex = 0;
+    bool direct = false;            // Schalter "Direkt" der Line
+    bool clipIn = false, clipOut = false;
     bool autoRole = false;          // Rolle automatisch erkannt
     float autoConfidence = 0.0f;
     bool autoFromName = false;
@@ -239,6 +253,26 @@ public:
     {
         learnCommandValue.store (cmd);
         learnCommandGen.fetch_add (1);
+    }
+
+    // Fernbedienung einer Line aus der Mix-Übersicht: Direkt / Hold (0/1), Vorrang (Stufe 0..4)
+    enum RemoteParam { remoteDirect = 1, remoteHold = 2, remotePriority = 3 };
+    void sendRemote (int slot, int param, float value) noexcept
+    {
+        if (auto* d = getAudioData (slot))
+        {
+            d->remoteParam.store (param);
+            d->remoteValue.store (value);
+            d->remoteGen.fetch_add (1);
+        }
+    }
+    void resetClip (int slot) noexcept
+    {
+        if (auto* d = getAudioData (slot))
+        {
+            d->clipIn.store (false);
+            d->clipOut.store (false);
+        }
     }
 
     // Abhöre des Exchange (gilt nur, solange die Engine läuft) und Pegelunterschied roh/bearbeitet

@@ -51,6 +51,9 @@ void SlotAudioData::reset() noexcept
     frozen.store (false); bypassed.store (false);
     engMode.store (-1); engRole.store (0);
     learnMode.store (0); learnSec.store (0.0f); learnActive.store (false); renderWarnMs.store (0);
+    remoteGen.store (0); remoteParam.store (0); remoteValue.store (0.0f); priorityIndex.store (0);
+    directSwitch.store (false);
+    clipIn.store (false); clipOut.store (false);
     for (auto* f : { &fCentroid, &fFlatness, &fSub, &fLow, &fHigh, &fOnsetRate, &fHarmonicity, &fPitch, &fPitchVar, &fCrest, &fWidth, &fActiveSec })
         f->store (0.0f);
 }
@@ -59,7 +62,7 @@ void SlotAudioData::reset() noexcept
 namespace
 {
 // Bei jeder Änderung von HubShared/SlotAudioData erhöhen → verschiedene AME-Versionen teilen keinen Speicher
-constexpr uint32_t kLayoutVersion = 4;
+constexpr uint32_t kLayoutVersion = 5;   // 5: Fernbedienung je Line, Vorrang-Stufe, Clip-Merker (1.2.0)
 constexpr uint32_t kMagic = 0x414d4548;   // "AMEH"
 
 uint32_t currentPid() noexcept
@@ -510,6 +513,10 @@ std::vector<TrackSnapshot> MixHub::getSnapshot() const
         s.reaction = a.reaction.load();
         s.frozen = a.frozen.load();
         s.bypassed = a.bypassed.load();
+        s.priorityIndex = a.priorityIndex.load();
+        s.direct = a.directSwitch.load();
+        s.clipIn = a.clipIn.load();
+        s.clipOut = a.clipOut.load();
         result.push_back (std::move (s));
     }
 

@@ -96,11 +96,61 @@ int EqGraph::hitNode (juce::Point<float> pos) const
     float bestDist = nodeRadius * 2.0f;
     for (int i = 0; i < (int) nodes.size(); ++i)
     {
-        if (! nodeEnabled (nodes[(size_t) i])) continue;
+        // auch ausgeschaltete Filter (HP/LP) sind greifbar: Doppelklick schaltet sie ein
         const float d = nodePosition (nodes[(size_t) i]).getDistanceFrom (pos);
         if (d < bestDist) { bestDist = d; best = i; }
     }
     return best;
+}
+
+juce::String EqGraph::nodeReadout (int index) const
+{
+    using i18n::tr;
+    const auto& n = nodes[(size_t) index];
+    auto hzText = [] (float hz)
+    {
+        return hz >= 1000.0f ? juce::String (hz / 1000.0f, 2) + " kHz" : juce::String (juce::roundToInt (hz)) + " Hz";
+    };
+
+    static const char* names[] { "LOW", "MID 1", "MID 2", "HIGH", "HP", "LP" };
+    juce::String s = juce::String (names[index]) + AME_TXT (" · ") + hzText (value (n.freqId));
+
+    if (n.gainId != nullptr)
+    {
+        const float g = value (n.gainId);
+        s << AME_TXT (" · ") << (g >= 0.0f ? "+" : "") << juce::String (g, 1) << " dB";
+        s << AME_TXT (" · Q ") << juce::String (value (n.qId), 2);
+    }
+    else
+    {
+        static const int slopes[] { 12, 24, 48 };
+        const int slope = juce::jlimit (0, 2, juce::roundToInt (value (index == 4 ? pid::hpfSlope : pid::lpfSlope)));
+        s << AME_TXT (" · ") << slopes[slope] << tr (" dB/Okt.", " dB/oct");
+        s << (nodeEnabled (n) ? tr (" · Doppelklick = aus", " · double-click = off")
+                              : tr (" · AUS – Doppelklick = ein", " · OFF – double-click = on"));
+    }
+    return s;
+}
+
+void EqGraph::paintReadout (juce::Graphics& g, int index)
+{
+    const auto p = plotArea();
+    const auto pos = nodePosition (nodes[(size_t) index]);
+    const auto text = nodeReadout (index);
+
+    g.setFont (fonts::mono (12.0f, true));
+    const float w = juce::jmin (p.getWidth() - 8.0f, (float) text.length() * 7.4f + 14.0f);
+    auto box = juce::Rectangle<float> (w, 18.0f).withCentre ({ pos.x, pos.y - 24.0f });
+    if (box.getY() < p.getY() + 20.0f)   // oben kein Platz (Legende): unter den Punkt
+        box.setY (pos.y + 14.0f);
+    box.setX (juce::jlimit (p.getX() + 4.0f, p.getRight() - 4.0f - w, box.getX()));
+
+    g.setColour (colours::display.withAlpha (0.9f));
+    g.fillRoundedRectangle (box, 3.0f);
+    g.setColour (colours::amber.withAlpha (0.7f));
+    g.drawRoundedRectangle (box, 3.0f, 1.0f);
+    g.setColour (colours::amberLamp);
+    g.drawText (text, box.reduced (6.0f, 0.0f), juce::Justification::centred, true);
 }
 
 EqGraph::ManualKey EqGraph::manualKey (const ChannelStrip::Params& p) noexcept
@@ -293,7 +343,6 @@ void EqGraph::paint (juce::Graphics& g)
     for (int i = 0; i < (int) nodes.size(); ++i)
     {
         const auto& n = nodes[(size_t) i];
-        if (! nodeEnabled (n)) continue;
         const auto pos = nodePosition (n);
         const bool active = i == dragNode || i == hoverNode;
         auto r = juce::Rectangle<float> (nodeRadius * 2.0f, nodeRadius * 2.0f).withCentre (pos);
@@ -302,12 +351,26 @@ void EqGraph::paint (juce::Graphics& g)
             g.setColour (colours::amberLamp.withAlpha (0.3f));
             g.fillEllipse (r.expanded (5.0f));
         }
+        if (! nodeEnabled (n))
+        {
+            // ausgeschaltetes Filter: dunkle Lampe mit Rand – greifbar, Doppelklick schaltet ein
+            g.setColour (juce::Colour (0xff2c2a22));
+            g.fillEllipse (r);
+            g.setColour (colours::amber.withAlpha (active ? 0.9f : 0.5f));
+            g.drawEllipse (r, 1.0f);
+            g.drawText (n.label, r.expanded (4.0f), juce::Justification::centred);
+            continue;
+        }
         g.setColour (active ? juce::Colour (0xfffff2c0) : colours::amberLamp);
         g.fillEllipse (r);
         g.setColour (colours::bakelite);
         g.drawEllipse (r, 1.0f);
         g.drawText (n.label, r.expanded (4.0f), juce::Justification::centred);
     }
+
+    // Werte des gezogenen bzw. gezeigten Punkts
+    if (const int shownNode = dragNode >= 0 ? dragNode : hoverNode; shownNode >= 0)
+        paintReadout (g, shownNode);
 
     // Legende
     g.setFont (fonts::mono (10.0f, true));
@@ -329,6 +392,11 @@ void EqGraph::mouseMove (const juce::MouseEvent& e)
     const int h = hitNode (e.position);
     if (h != hoverNode) { hoverNode = h; repaint(); }
     setMouseCursor (h >= 0 ? juce::MouseCursor::DraggingHandCursor : juce::MouseCursor::NormalCursor);
+}
+
+void EqGraph::mouseExit (const juce::MouseEvent&)
+{
+    if (hoverNode >= 0) { hoverNode = -1; repaint(); }
 }
 
 void EqGraph::mouseDown (const juce::MouseEvent& e)
@@ -371,15 +439,19 @@ void EqGraph::mouseUp (const juce::MouseEvent&)
 void EqGraph::mouseDoubleClick (const juce::MouseEvent& e)
 {
     const int h = hitNode (e.position);
-    if (h >= 0 && nodes[(size_t) h].gainId != nullptr)
+    if (h < 0)
+        return;
+
+    // Bänder: Gain 0 · Hochpass/Tiefpass: ein/aus
+    const auto& n = nodes[(size_t) h];
+    if (auto* prm = apvts.getParameter (n.gainId != nullptr ? n.gainId : n.onId))
     {
-        if (auto* prm = apvts.getParameter (nodes[(size_t) h].gainId))
-        {
-            prm->beginChangeGesture();
-            prm->setValueNotifyingHost (prm->convertTo0to1 (0.0f));
-            prm->endChangeGesture();
-        }
+        prm->beginChangeGesture();
+        prm->setValueNotifyingHost (n.gainId != nullptr ? prm->convertTo0to1 (0.0f) : (nodeEnabled (n) ? 0.0f : 1.0f));
+        prm->endChangeGesture();
     }
+    keyValid = false;
+    repaint();
 }
 
 void EqGraph::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w)
@@ -393,6 +465,8 @@ void EqGraph::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelD
         prm->beginChangeGesture();
         prm->setValueNotifyingHost (prm->convertTo0to1 (q));
         prm->endChangeGesture();
+        keyValid = false;   // Kurve und Werteanzeige sofort
+        repaint();
     }
 }
 } // namespace ame::ui

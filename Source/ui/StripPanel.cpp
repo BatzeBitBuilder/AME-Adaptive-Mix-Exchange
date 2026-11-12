@@ -25,6 +25,10 @@ StripPanel::StripPanel (juce::AudioProcessorValueTreeState& state, MixHub& h, in
 {
     addAndMakeVisible (eqGraph);
     addAndMakeVisible (levelVu);
+    inputClip.onReset  = [this] { if (auto* d = hub.getAudioData (slot)) d->clipIn.store (false);  inputClip.setOn (false); };
+    outputClip.onReset = [this] { if (auto* d = hub.getAudioData (slot)) d->clipOut.store (false); outputClip.setOn (false); };
+    addAndMakeVisible (inputClip);
+    addAndMakeVisible (outputClip);
     addAndMakeVisible (grVu);
     addAndMakeVisible (waterfall);
 
@@ -255,6 +259,10 @@ void StripPanel::updateTexts()
     updateRoleButton();
 
     levelVu.setCaption (tr ("Ausgang", "Output"));
+    inputClip.setTooltip (tr ("Übersteuerung am Eingang (0 dBFS erreicht). Bleibt an, Klick setzt zurück.",
+                              "Input overload (0 dBFS reached). Stays on, click to reset."));
+    outputClip.setTooltip (tr ("Übersteuerung am Ausgang (0 dBFS erreicht). Bleibt an, Klick setzt zurück.",
+                               "Output overload (0 dBFS reached). Stays on, click to reset."));
     grVu.setCaption (tr ("Kompressor", "Compressor"));
     waterfall.setCaption (tr ("SPEKTROGRAMM", "SPECTROGRAM"));
     spectroFold.setLabel (tr ("SPEKTROGRAMM", "SPECTROGRAM"));
@@ -673,6 +681,28 @@ void StripPanel::resized()
         eqGraph.setBounds (inner);
         layoutKnobRow (eq.knobs, knobRow);
     }
+
+    // Clip-Lampen rechts in der Titelzeile von INPUT und OUTPUT
+    inputClip.setBounds (input.bounds.reduced (8, 5).removeFromTop (18).removeFromRight (40));
+    outputClip.setBounds (output.bounds.reduced (8, 5).removeFromTop (18).removeFromRight (40));
+}
+
+void StripPanel::ClipLamp::paint (juce::Graphics& g)
+{
+    auto r = getLocalBounds().toFloat();
+    auto lamp = r.removeFromRight (10.0f).withSizeKeepingCentre (8.0f, 8.0f);
+    if (on)
+    {
+        g.setColour (juce::Colour (0x55ff3a2a));
+        g.fillEllipse (lamp.expanded (2.5f));
+    }
+    g.setColour (on ? juce::Colour (0xffff3a2a) : juce::Colour (0xff5a2a1a));
+    g.fillEllipse (lamp);
+    g.setColour (colours::engrave);
+    g.drawEllipse (lamp, 1.0f);
+    g.setColour (on ? colours::warn : colours::inkDim);
+    g.setFont (fonts::label (13.0f));
+    g.drawText ("CLIP", r.withTrimmedRight (3.0f), juce::Justification::centredRight);
 }
 
 void StripPanel::paint (juce::Graphics& g)
@@ -880,6 +910,8 @@ void StripPanel::refreshMeters()
         const bool audioActive = idleTicks < 45;
 
         levelVu.update (d->rmsDb.load(), d->peakDb.load(), dt);
+        inputClip.setOn (d->clipIn.load (std::memory_order_relaxed));
+        outputClip.setOn (d->clipOut.load (std::memory_order_relaxed));
         grVu.updateGainReduction (d->gainReductionDb.load(), dt);
         for (size_t k = 0; k < (size_t) kNumAdaptiveBands; ++k)
             cutDb[k] = d->appliedCutDb[k].load();

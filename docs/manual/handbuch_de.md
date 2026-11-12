@@ -1,6 +1,6 @@
 # AME – Adaptive Mix Exchange
 
-**Handbuch · Version 1.1.1** · entwickelt von **Batze the bit builder**
+**Handbuch · Version 1.2.0** · entwickelt von **Batze the bit builder**
 
 *Every track finds its aim.* – Jede Spur bekommt ihren Platz.
 
@@ -92,6 +92,8 @@ Die Kopfzeile ist in Line und Exchange gleich aufgebaut:
 
 Signalweg: **Input → Phase → Filter → Gate → EQ ⇄ Kompressor → De-Esser → Sättigung → [Analyse] → Adaptiv → Pan/Width → Output → Limiter**
 
+Regler: **Doppelklick** setzt auf den Standardwert. Mit gehaltener **Shift-Taste** gezogen, lässt sich ein Regler fein einstellen (sechsfacher Weg). Der Wert unter dem Regler kann angeklickt und eingetippt werden.
+
 ### Presets und A/B
 Die Leiste oben:
 
@@ -105,6 +107,8 @@ Presets setzen die Parameter wie eine Bedienung von Hand – die DAW kann sie r�
 
 ### Input
 **Gain** (±24 dB). **Ø L / Ø R** kehren die Phase (Polarität) des linken bzw. rechten Kanals um – z. B. für Snare unten oder Kick Out.
+
+Die Lampe **CLIP** im Titel leuchtet rot, sobald das Signal am Eingang 0 dBFS erreicht hat, und bleibt an, bis sie angeklickt wird. Dieselbe Lampe gibt es bei **OUTPUT** für den Ausgang der Line (hinter Output-Gain und Limiter).
 
 ### Filter
 **HPF** (20 Hz–1 kHz) und **LPF** (1–20 kHz), Lampen im Titel schalten sie ein. Darunter die **Flankensteilheit**: 12, 24 oder 48 dB/Oktave.
@@ -133,7 +137,7 @@ Die Grafik zeigt:
 - **EQ**-Kurve (creme, inkl. Filter) mit ziehbaren Punkten L, 1, 2, H, HP, LP,
 - **Engine**-Kurve gestrichelt (bernstein).
 
-Bedienung: Punkt **ziehen** = Frequenz/Gain, **Mausrad** = Q, **Doppelklick** = 0 dB. Darunter läuft das **Spektrogramm**; der Klappschalter (Dreieck) **SPEKTROGRAMM** im EQ-Titel blendet es aus (die Grafik wird höher).
+Bedienung: Punkt **ziehen** = Frequenz/Gain, **Mausrad** = Q, **Doppelklick** = 0 dB. Beim Zeigen auf einen Punkt und beim Ziehen erscheinen seine Werte (Frequenz, Gain, Q bzw. Flankensteilheit). **HP** und **LP** sind auch ausgeschaltet als dunkle Punkte sichtbar: **Doppelklick** schaltet das Filter ein bzw. aus. Darunter läuft das **Spektrogramm**; der Klappschalter (Dreieck) **SPEKTROGRAMM** im EQ-Titel blendet es aus (die Grafik wird höher).
 
 ### Output
 In der rechten Spalte: **Pan**, **Width** (0–200 %, 100 % = unverändert, 0 % = Mono) und **Gain** (±24 dB).
@@ -186,18 +190,21 @@ Die Tabelle listet alle Lines:
 |---|---|
 | Line | Name, Spurfarbe; [EX] = aktives Exchange, [EX–] = inaktives |
 | Rolle | gewählte Rolle; „(A)" = automatisch erkannt |
-| Pegel | LED-Kette des Pegels |
+| Pegel | LED-Kette des Pegels; rotes Feld am Ende = Übersteuerung (0 dBFS erreicht, Klick setzt zurück) |
 | GR | Gain Reduction des Kompressors |
 | Maskiert | Maskierungsgrad vorher > nachher (in %) |
 | Überdeckt von | Hauptverursacher und Frequenzbereich |
-| Adaptiv | aktuelle Eingriffe: Gain, HP (Hochpass), EQ (stärkste Absenkung), [DIR] / [HOLD] |
+| Adaptiv | aktuelle Eingriffe: Gain, HP (Hochpass), EQ (stärkste Absenkung) |
+| D / H / Vorr. | Schaltfelder der Line: **D** = Direkt, **H** = Hold, **Vorr.** = Vorrang (PROG, ++, +, -, - -; Klick öffnet die Auswahl) |
+
+Die Schaltfelder bedienen die jeweilige Line direkt aus der Übersicht – auch aus einer anderen Line heraus (Schalter **Mix-Übersicht**). Die Line übernimmt die Änderung innerhalb von etwa 0,1 s; sie erscheint in der DAW wie eine Bedienung am Plugin selbst. Bei vielen Lines lässt sich die Liste mit dem **Mausrad** oder dem Rollbalken rechts durchblättern.
 
 **Zeile anklicken** wählt eine Spur aus: Der Analyzer zeigt dann ihre Überdeckung als Wärmesäulen (gelb → rot), ihr Spektrum vor der Engine gestrichelt, den Peak gepunktet und ihr Spektrogramm.
 
 ### Analyzer, Patchfeld, VU
 Links Line-Liste und Analyzer, rechts die Spalte **DETAILS** mit Patchfeld, VU Links/Rechts und dem Spektrogramm der ausgewählten Spur. Liste und DETAILS lassen sich einklappen (Dreieck), der Analyzer nutzt dann den Platz.
 
-- **Analyzer**: alle Spuren als farbige Flächen, die **Summe** als Creme-Linie; ohne Auswahl zeigen die Wärmesäulen die Gesamtbelegung je Frequenz. Bei mehr als 12 Lines werden die Spuren als einfache Linien gezeichnet (übersichtlicher und schneller); die ausgewählte Spur behält ihre Fläche.
+- **Analyzer**: alle Spuren als farbige Flächen, die **Summe** als Creme-Linie; ohne Auswahl zeigen die Wärmesäulen die Gesamtbelegung je Frequenz. Bei mehr als 12 Lines werden die Spuren als einfache Linien gezeichnet (übersichtlicher und schneller); die ausgewählte Spur behält ihre Fläche. **Zeigen** auf eine Kurve hebt sie hervor und blendet Name und Rolle ein, **Klick** wählt die Spur aus.
 - **Patchfeld**: Matrix aller Lines – Zeile wird von Spalte verdeckt. Je heller, desto stärker. Klick wählt die Spur.
 - **VU Links/Rechts**: Summenpegel.
 
@@ -308,7 +315,7 @@ Typischer Ablauf: Programm wählen → Song einige Male durchlaufen lassen → m
 
 ## Über AME
 
-**AME – Adaptive Mix Exchange**, Version 1.1.1
+**AME – Adaptive Mix Exchange**, Version 1.2.0
 
 Entwickelt von **Batze the bit builder**.
 

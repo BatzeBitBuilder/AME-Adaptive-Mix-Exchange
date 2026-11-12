@@ -156,6 +156,29 @@ void AmeProcessor::timerCallback()
     if (juce::roundToInt (param (pid::learnMode)) == 1)
         recording.allocate();   // Speicher erst bei Bedarf (einmalig)
 
+    // Fernbedienung aus der Mix-Übersicht: Direkt / Hold / Vorrang dieser Line
+    if (auto* d = hub->getAudioData (slot))
+    {
+        const auto rgen = d->remoteGen.load();
+        if (rgen != lastRemoteGen)
+        {
+            lastRemoteGen = rgen;
+            const int what = d->remoteParam.load();
+            const float value = d->remoteValue.load();
+            const char* id = what == MixHub::remoteDirect   ? pid::adaptBypass
+                           : what == MixHub::remoteHold     ? pid::adaptFreeze
+                           : what == MixHub::remotePriority ? pid::priority : nullptr;
+            if (id != nullptr && getMode() == InstanceMode::Track)
+                if (auto* p = apvts.getParameter (id))
+                {
+                    p->beginChangeGesture();
+                    p->setValueNotifyingHost (p->convertTo0to1 (what == MixHub::remotePriority ? juce::jlimit (0.0f, 4.0f, value)
+                                                                                               : (value > 0.5f ? 1.0f : 0.0f)));
+                    p->endChangeGesture();
+                }
+        }
+    }
+
     // Eingefrorene Werte im Projekt speichern
     if (frozenDirty.exchange (false))
         storeFrozenState();
@@ -213,14 +236,19 @@ void AmeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         const int nch = juce::jmin (2, buffer.getNumChannels());
         if (dryBuffer.getNumSamples() < numSamples)
             dryBuffer.setSize (2, numSamples, false, true, true);
-        float dryPow = 0.0f;
+        float dryPow = 0.0f, inPeak = 0.0f;
         for (int ch = 0; ch < nch; ++ch)
         {
             dryBuffer.copyFrom (ch, 0, buffer, ch, 0, numSamples);
             const float* x = buffer.getReadPointer (ch);
             for (int i = 0; i < numSamples; ++i)
+            {
                 dryPow += x[i] * x[i];
+                inPeak = juce::jmax (inPeak, std::abs (x[i]));
+            }
         }
+        if (inPeak >= 1.0f && data != nullptr)
+            data->clipIn.store (true, std::memory_order_relaxed);   // Eingang >= 0 dBFS (Merker, die Anzeige setzt zurück)
 
         strip.processPre (buffer, p);
 
@@ -233,7 +261,10 @@ void AmeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         {
             const float reaction = prm.reaction->load (std::memory_order_relaxed) * 0.01f;
             data->reaction.store (reaction, std::memory_order_relaxed);
-            data->priorityOffset.store (getPriorityOffset (juce::roundToInt (prm.priority->load (std::memory_order_relaxed))), std::memory_order_relaxed);
+            const int prioIndex = juce::roundToInt (prm.priority->load (std::memory_order_relaxed));
+            data->priorityOffset.store (getPriorityOffset (prioIndex), std::memory_order_relaxed);
+            data->priorityIndex.store (prioIndex, std::memory_order_relaxed);
+            data->directSwitch.store (prm.adaptBypass->load (std::memory_order_relaxed) > 0.5f, std::memory_order_relaxed);
 
             const bool alive = hub->isEngineAlive();
             const float amt = alive ? prm.amount->load (std::memory_order_relaxed) * 0.01f * hub->globalAmount.load() : 0.0f;
@@ -444,6 +475,8 @@ void AmeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuf
         }
     }
     if (nch == 1) chSq[1] = chSq[0];
+    if (peak >= 1.0f)
+        data->clipOut.store (true, std::memory_order_relaxed);   // Ausgang >= 0 dBFS
     data->rmsLeftDb.store (juce::Decibels::gainToDecibels (std::sqrt (chSq[0] / (float) n), -100.0f), std::memory_order_relaxed);
     data->rmsRightDb.store (juce::Decibels::gainToDecibels (std::sqrt (chSq[1] / (float) n), -100.0f), std::memory_order_relaxed);
 

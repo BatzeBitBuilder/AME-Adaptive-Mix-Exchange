@@ -35,6 +35,11 @@ MixOverview::MixOverview (MixHub& h) : hub (h)
     addAndMakeVisible (matrix);
     waterfall.setRange (-90.0f, -20.0f);
     peakDb.fill (-100.0f);
+    listScroll.addListener (this);
+    listScroll.setAutoHide (false);
+    listScroll.setSingleStepSize (1.0);
+    listScroll.setColour (juce::ScrollBar::thumbColourId, colours::engrave);
+    addChildComponent (listScroll);
     matrix.onSelect = [this] (uint32_t id) { selectedId = id; slowDirty = true; idleTicks = 0; repaint(); };
     for (auto* f : { &listFold, &detailsFold })
     {
@@ -174,6 +179,7 @@ void MixOverview::refresh (uint32_t ownInstanceId, float dt)
 
     if (slow)
     {
+        updateListScroll();
         std::vector<juce::Colour> cols;
         for (const auto& t : tracks) cols.push_back (colourFor (t));
         matrix.setData (tracks, masking, cols, selectedId);
@@ -220,22 +226,257 @@ void MixOverview::resized()
     area.removeFromTop (8);
 
     spectrumArea = area;
+
+    const auto rows = rowsArea();
+    listScroll.setBounds (rows.getRight() - 11, rows.getY() + 3, 10, juce::jmax (0, rows.getHeight() - 4));
+    updateListScroll();
+}
+
+//==============================================================================
+// Liste: Geometrie
+MixOverview::RowCells MixOverview::cellsFor (juce::Rectangle<int> r) const
+{
+    RowCells c;
+    r.removeFromLeft (12);
+    c.name = r.removeFromLeft (132);
+    c.role = r.removeFromLeft (118);
+    r.removeFromRight (26);            // Rollbalken / Klapp-Dreieck
+    c.prio = r.removeFromRight (46);
+    r.removeFromRight (4);
+    c.hold = r.removeFromRight (22);
+    r.removeFromRight (3);
+    c.direct = r.removeFromRight (22);
+    r.removeFromRight (8);
+    c.adapt = r.removeFromRight (150);
+    c.info  = r.removeFromRight (160);
+    c.mask  = r.removeFromRight (112);
+    c.gr    = r.removeFromRight (40);
+    r.removeFromRight (8);
+    c.level = r;
+    return c;
+}
+
+juce::Rectangle<int> MixOverview::rowsArea() const
+{
+    auto a = listArea.reduced (8, 6);
+    a.removeFromTop (headH);
+    return a;
+}
+
+int MixOverview::visibleRows() const
+{
+    return juce::jmax (1, rowsArea().getHeight() / rowH);
+}
+
+int MixOverview::firstRow() const
+{
+    return juce::jlimit (0, juce::jmax (0, (int) tracks.size() - visibleRows()),
+                         juce::roundToInt (listScroll.getCurrentRangeStart()));
+}
+
+juce::Rectangle<int> MixOverview::rowBounds (int row) const
+{
+    const auto a = rowsArea();
+    return { a.getX(), a.getY() + (row - firstRow()) * rowH, a.getWidth(), rowH };
+}
+
+int MixOverview::rowAt (juce::Point<int> p) const
+{
+    const auto a = rowsArea();
+    if (listFold.isFolded() || ! a.contains (p))
+        return -1;
+    const int line = (p.y - a.getY()) / rowH;
+    const int row = firstRow() + line;
+    return line < visibleRows() && juce::isPositiveAndBelow (row, (int) tracks.size()) ? row : -1;
+}
+
+void MixOverview::updateListScroll()
+{
+    const int rows = visibleRows(), n = (int) tracks.size();
+    const int first = firstRow();
+    listScroll.setRangeLimits (0.0, (double) juce::jmax (n, rows), juce::dontSendNotification);
+    listScroll.setCurrentRange ((double) first, (double) rows, juce::dontSendNotification);
+    listScroll.setVisible (! listFold.isFolded() && n > rows);
+}
+
+void MixOverview::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w)
+{
+    if (! listArea.contains (e.getPosition()) || (int) tracks.size() <= visibleRows())
+        return;
+    // eine Rasterung des Mausrads = etwa zwei Zeilen
+    const double step = w.deltaY > 0.0f ? -juce::jmax (1.0, (double) w.deltaY * 8.0) : juce::jmax (1.0, (double) -w.deltaY * 8.0);
+    if (w.deltaY != 0.0f)
+        listScroll.setCurrentRangeStart (juce::jlimit (0.0, (double) ((int) tracks.size() - visibleRows()),
+                                                       (double) firstRow() + std::round (step)));
+}
+
+void MixOverview::showPriorityMenu (int row)
+{
+    const auto& t = tracks[(size_t) row];
+    juce::PopupMenu m;
+    m.addSectionHeader (tr ("Vorrang", "Priority") + AME_TXT (" – ") + t.name);
+    const auto names = getPriorityNames();
+    for (int i = 0; i < names.size(); ++i)
+        m.addItem (i + 1, names[i], true, i == t.priorityIndex);
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this)
+                                               .withTargetScreenArea (localAreaToGlobal (cellsFor (rowBounds (row)).prio)),
+                     [safe = juce::Component::SafePointer<MixOverview> (this), slot = t.slot] (int r)
+                     {
+                         if (safe != nullptr && r > 0)
+                         {
+                             safe->hub.sendRemote (slot, MixHub::remotePriority, (float) (r - 1));
+                             safe->slowDirty = true;
+                         }
+                     });
+}
+
+juce::String MixOverview::getTooltip()
+{
+    const auto p = getMouseXYRelative();
+    const int row = rowAt (p);
+    if (row < 0)
+        return {};
+
+    const auto& t = tracks[(size_t) row];
+    const auto c = cellsFor (rowBounds (row));
+    if ((t.clipIn || t.clipOut) && c.level.contains (p))
+        return (t.clipIn && t.clipOut ? tr ("Übersteuerung an Eingang und Ausgang", "Overload at input and output")
+                : t.clipIn            ? tr ("Übersteuerung am Eingang", "Input overload")
+                                      : tr ("Übersteuerung am Ausgang", "Output overload"))
+               + tr (" (0 dBFS erreicht) – Klick setzt zurück", " (0 dBFS reached) – click to reset");
+    if (t.mode != InstanceMode::Track)
+        return {};
+    if (c.direct.contains (p))
+        return tr ("Direkt: adaptive Eingriffe dieser Line aus/ein", "Direct: adaptive processing of this line off/on");
+    if (c.hold.contains (p))
+        return tr ("Hold: aktuelle adaptive Werte dieser Line halten/lösen", "Hold: freeze/release the current adaptive values of this line");
+    if (c.prio.contains (p))
+        return tr ("Vorrang dieser Line: ", "Priority of this line: ") + getPriorityNames()[juce::jlimit (0, 4, t.priorityIndex)]
+               + tr (" – Klick wählt", " – click to choose");
+    return {};
+}
+
+//==============================================================================
+// Analyzer: Geometrie und Kurve unter der Maus
+namespace
+{
+float specY (juce::Rectangle<float> plot, float db)
+{
+    return juce::jmap (juce::jlimit (specMinDb, specMaxDb, db), specMinDb, specMaxDb, plot.getBottom(), plot.getY());
+}
+}
+
+juce::Rectangle<float> MixOverview::spectrumPlot() const
+{
+    return spectrumArea.reduced (10, 6).withTrimmedTop (22).withTrimmedBottom (14).withTrimmedLeft (24).toFloat();
+}
+
+int MixOverview::curveAt (juce::Point<float> pos) const
+{
+    const auto plot = spectrumPlot();
+    if (! plot.contains (pos) || responseFine.size() != tracks.size())
+        return -1;
+
+    const float fd = (pos.x - plot.getX()) / plot.getWidth() * (float) (kNumDisplayPoints - 1);
+    const int d0 = juce::jlimit (0, kNumDisplayPoints - 2, (int) fd);
+    const float frac = juce::jlimit (0.0f, 1.0f, fd - (float) d0);
+
+    int best = -1;
+    float bestDist = 9.0f;   // Fangbereich in Pixeln
+    for (int i = 0; i < (int) tracks.size(); ++i)
+    {
+        const auto& t = tracks[(size_t) i];
+        if (t.mode != InstanceMode::Track || ! t.hasAnalysis)
+            continue;
+        const float v0 = t.displayDb[(size_t) d0] + responseFine[(size_t) i][(size_t) d0];
+        const float v1 = t.displayDb[(size_t) d0 + 1] + responseFine[(size_t) i][(size_t) d0 + 1];
+        const float v = v0 + frac * (v1 - v0);
+        if (v <= specMinDb + 1.0f)
+            continue;   // am Boden liegen alle Kurven übereinander
+        const float dist = std::abs (specY (plot, v) - pos.y);
+        if (dist < bestDist) { bestDist = dist; best = i; }
+    }
+    return best;
+}
+
+void MixOverview::mouseMove (const juce::MouseEvent& e)
+{
+    const int idx = curveAt (e.position);
+    const uint32_t id = idx >= 0 ? tracks[(size_t) idx].instanceId : 0;
+    if (id != hoverId || id != 0)
+    {
+        hoverId = id;
+        hoverPos = e.position;
+        repaint (spectrumArea);
+    }
+    setMouseCursor (id != 0 ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+}
+
+void MixOverview::mouseExit (const juce::MouseEvent&)
+{
+    if (hoverId != 0)
+    {
+        hoverId = 0;
+        repaint (spectrumArea);
+    }
 }
 
 void MixOverview::mouseDown (const juce::MouseEvent& e)
 {
-    if (! listArea.contains (e.getPosition()))
-        return;
-
-    const int row = (e.y - listArea.getY() - 6 - headH) / rowH;
-    if (juce::isPositiveAndBelow (row, (int) tracks.size()))
+    const auto p = e.getPosition();
+    auto select = [this] (uint32_t id)
     {
-        const auto id = tracks[(size_t) row].instanceId;
         selectedId = (selectedId == id ? 0 : id);
         slowDirty = true;   // Patchfeld-Auswahl sofort nachführen
         idleTicks = 0;
         repaint();
+    };
+
+    // Analyzer: Klick auf eine Kurve wählt die Line
+    if (spectrumArea.contains (p))
+    {
+        if (const int idx = curveAt (e.position); idx >= 0)
+            select (tracks[(size_t) idx].instanceId);
+        return;
     }
+
+    const int row = rowAt (p);
+    if (row < 0)
+        return;
+
+    auto& t = tracks[(size_t) row];
+    const auto c = cellsFor (rowBounds (row));
+
+    // Clip-Merker zurücksetzen
+    if ((t.clipIn || t.clipOut) && c.level.contains (p))
+    {
+        hub.resetClip (t.slot);
+        t.clipIn = t.clipOut = false;
+        repaint (listArea);
+        return;
+    }
+
+    // Fernbedienung der Line: Direkt / Hold / Vorrang
+    if (t.mode == InstanceMode::Track)
+    {
+        if (c.direct.contains (p) || c.hold.contains (p))
+        {
+            const bool isDirect = c.direct.contains (p);
+            auto& state = isDirect ? t.direct : t.frozen;
+            state = ! state;   // sofort anzeigen; die Line bestätigt mit ihrem nächsten Timer-Takt
+            hub.sendRemote (t.slot, isDirect ? MixHub::remoteDirect : MixHub::remoteHold, state ? 1.0f : 0.0f);
+            idleTicks = 0;
+            repaint (listArea);
+            return;
+        }
+        if (c.prio.contains (p))
+        {
+            showPriorityMenu (row);
+            return;
+        }
+    }
+
+    select (t.instanceId);
 }
 
 void MixOverview::paint (juce::Graphics& g)
@@ -257,27 +498,10 @@ void MixOverview::paintList (juce::Graphics& g, juce::Rectangle<int> area)
     const auto roleNames = getRoleNames();
     const uint32_t masterId = hub.getActiveMasterId();
 
-    constexpr int cName = 140, cRole = 130, cGr = 44, cMask = 120, cInfo = 190, cAdapt = 190;
-
-    auto columns = [&] (juce::Rectangle<int> r)
-    {
-        struct Cols { juce::Rectangle<int> name, role, level, gr, mask, info, adapt; } c;
-        r.removeFromLeft (12);
-        c.name = r.removeFromLeft (cName);
-        c.role = r.removeFromLeft (cRole);
-        c.adapt = r.removeFromRight (cAdapt);
-        c.info = r.removeFromRight (cInfo);
-        c.mask = r.removeFromRight (cMask);
-        c.gr   = r.removeFromRight (cGr);
-        r.removeFromRight (8);
-        c.level = r;
-        return c;
-    };
-
     g.setFont (fonts::label (16.0f));
     g.setColour (colours::ink);
     {
-        auto c = columns (area.removeFromTop (headH));
+        const auto c = cellsFor (area.removeFromTop (headH));
         g.drawText ("LINE", c.name, juce::Justification::centredLeft);
         g.drawText (tr ("ROLLE", "ROLE"), c.role, juce::Justification::centredLeft);
         g.drawText (tr ("PEGEL", "LEVEL"), c.level, juce::Justification::centredLeft);
@@ -285,6 +509,9 @@ void MixOverview::paintList (juce::Graphics& g, juce::Rectangle<int> area)
         g.drawText (tr ("  MASKIERT", "  MASKED"), c.mask, juce::Justification::centredLeft);
         g.drawText (tr ("ÜBERDECKT VON", "MASKED BY"), c.info, juce::Justification::centredLeft);
         g.drawText (tr ("ADAPTIV", "ADAPTIVE"), c.adapt, juce::Justification::centredLeft);
+        g.drawText ("D", c.direct, juce::Justification::centred);
+        g.drawText ("H", c.hold, juce::Justification::centred);
+        g.drawText (tr ("VORR.", "PRIO"), c.prio, juce::Justification::centredLeft);
     }
     if (listFold.isFolded())
         return;
@@ -299,32 +526,36 @@ void MixOverview::paintList (juce::Graphics& g, juce::Rectangle<int> area)
         return;
     }
 
-    const int maxRows = area.getHeight() / rowH;
+    // Schaltfeld in der Zeile (Direkt, Hold, Vorrang)
+    auto cell = [&g] (juce::Rectangle<int> r, const juce::String& text, bool on, juce::Colour onColour)
+    {
+        const auto b = r.reduced (1, 1).toFloat();
+        g.setColour (on ? onColour : colours::cream);
+        g.fillRoundedRectangle (b, 3.0f);
+        g.setColour (colours::engrave);
+        g.drawRoundedRectangle (b, 3.0f, 1.0f);
+        g.setColour (on ? colours::bakelite : colours::inkDim);
+        g.setFont (fonts::label (13.0f));
+        g.drawText (text, b, juce::Justification::centred);
+    };
 
-    for (int idx = 0; idx < (int) tracks.size(); ++idx)
+    const int first = firstRow();
+    const int last = juce::jmin ((int) tracks.size(), first + visibleRows());
+
+    for (int idx = first; idx < last; ++idx)
     {
         const auto& t = tracks[(size_t) idx];
-
-        if (idx >= maxRows)
-        {
-            g.setColour (colours::inkDim);
-            g.setFont (fonts::mono (12.0f));
-            g.drawText ("+ " + juce::String ((int) tracks.size() - idx) + tr (" weitere", " more"),
-                        area.removeFromTop (rowH), juce::Justification::centredLeft);
-            break;
-        }
-
-        auto rowArea = area.removeFromTop (rowH).reduced (0, 2);
+        const auto rowArea = rowBounds (idx).reduced (0, 2);
 
         if (t.instanceId == selectedId)
         {
             g.setColour (colours::amber.withAlpha (0.35f));
-            g.fillRoundedRectangle (rowArea.toFloat(), 3.0f);
+            g.fillRoundedRectangle (rowArea.withTrimmedRight (14).toFloat(), 3.0f);
         }
 
         g.setColour (colourFor (t));
         g.fillRoundedRectangle (rowArea.withWidth (6).toFloat(), 2.0f);
-        auto c = columns (rowArea);
+        const auto c = cellsFor (rowArea);
 
         g.setFont (fonts::mono (13.0f, true));
         g.setColour (colours::ink);
@@ -400,18 +631,32 @@ void MixOverview::paintList (juce::Graphics& g, juce::Rectangle<int> area)
             g.drawText (tr ("kein Signal", "no signal"), c.mask.withTrimmedLeft (8), juce::Justification::centredLeft);
         }
 
+        // Clip-Merker: rotes Feld am Ende der Pegelkette (Klick setzt zurück)
+        if (t.clipIn || t.clipOut)
+        {
+            const auto clipBox = c.level.reduced (0, 4).removeFromRight (9).toFloat();
+            g.setColour (juce::Colour (0xffff3a2a));
+            g.fillRoundedRectangle (clipBox, 2.0f);
+            g.setColour (colours::bakelite);
+            g.drawRoundedRectangle (clipBox, 2.0f, 1.0f);
+        }
+
         if (t.mode == InstanceMode::Track)
         {
             float maxCut = 0.0f;
             for (auto v : t.appliedCutDb) maxCut = juce::jmin (maxCut, v);
             juce::String a;
-            if (t.bypassed)    a << "[DIR] ";
-            else if (t.frozen) a << "[HOLD] ";
             a << (t.appliedGainDb >= 0.0f ? "+" : "") << juce::String (t.appliedGainDb, 1) << "dB";
             if (t.appliedHpfHz >= 20.0f) a << " HP" << juce::roundToInt (t.appliedHpfHz);
             if (maxCut < -0.1f)          a << " EQ" << juce::String (maxCut, 1);
-            g.setColour (colours::inkDim);
+            g.setFont (fonts::mono (12.0f));
+            g.setColour (t.bypassed ? colours::inkDim.withAlpha (0.55f) : colours::inkDim);
             g.drawText (a, c.adapt, juce::Justification::centredLeft, true);
+
+            static const char* const prioShort[] { "PROG", "++", "+", "-", "- -" };
+            cell (c.direct, "D", t.direct, colours::amberLamp);
+            cell (c.hold, "H", t.frozen, juce::Colour (0xff8fd0ff));
+            cell (c.prio, prioShort[juce::jlimit (0, 4, t.priorityIndex)], t.priorityIndex != 0, colours::amber);
         }
     }
 }
@@ -436,7 +681,7 @@ void MixOverview::paintSpectrum (juce::Graphics& g, juce::Rectangle<int> area)
                                     "Heat columns = total occupancy · click a row for a single track"),
                 titleArea.withTrimmedLeft (90.0f), juce::Justification::centredLeft);
 
-    auto plot = area.reduced (10, 6).withTrimmedTop (22).withTrimmedBottom (14).withTrimmedLeft (24).toFloat();
+    const auto plot = spectrumPlot();
     drawDisplayBezel (g, plot);
 
     const float fMin = 20.0f, fMax = 20000.0f;
@@ -579,7 +824,37 @@ void MixOverview::paintSpectrum (juce::Graphics& g, juce::Rectangle<int> area)
         g.fillPath (dotted);
     }
 
+    // Kurve unter der Maus hervorheben
+    int hoverIdx = -1;
+    for (int i = 0; i < (int) tracks.size() && hoverId != 0; ++i)
+        if (tracks[(size_t) i].instanceId == hoverId && tracks[(size_t) i].mode == InstanceMode::Track && tracks[(size_t) i].hasAnalysis)
+            hoverIdx = i;
+    if (hoverIdx >= 0 && hoverIdx != selIdx)
+        drawPhosphorGlow (g, curve (hoverIdx, tracks[(size_t) hoverIdx].displayDb.data(), false),
+                          colourFor (tracks[(size_t) hoverIdx]).brighter (0.3f), 2.0f);
+
     g.restoreState();
+
+    // Namensschild an der Maus
+    if (hoverIdx >= 0)
+    {
+        const auto& t = tracks[(size_t) hoverIdx];
+        juce::String text = t.name;
+        if (t.role != Role::Auto)
+            text << AME_TXT (" · ") << getRoleNames()[(int) t.role];
+        g.setFont (fonts::mono (12.0f, true));
+        const float w = juce::jmin (plot.getWidth() - 8.0f, (float) text.length() * 7.4f + 22.0f);
+        auto box = juce::Rectangle<float> (w, 18.0f).withPosition (hoverPos.x + 12.0f, hoverPos.y - 24.0f);
+        box.setX (juce::jlimit (plot.getX() + 4.0f, plot.getRight() - 4.0f - w, box.getX()));
+        box.setY (juce::jlimit (plot.getY() + 20.0f, plot.getBottom() - 22.0f, box.getY()));
+        g.setColour (colours::display.withAlpha (0.92f));
+        g.fillRoundedRectangle (box, 3.0f);
+        g.setColour (colourFor (t));
+        g.drawRoundedRectangle (box, 3.0f, 1.0f);
+        g.fillRect (box.reduced (5.0f, 5.0f).withWidth (8.0f));
+        g.setColour (colours::cream);
+        g.drawText (text, box.withTrimmedLeft (18.0f).withTrimmedRight (5.0f), juce::Justification::centredLeft, true);
+    }
 
     // Legende: Spurfarben + Summe
     g.setFont (fonts::mono (10.0f, true));

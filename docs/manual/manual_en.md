@@ -1,6 +1,6 @@
 # AME – Adaptive Mix Exchange
 
-**Operating Manual · Version 1.1.1** · built by **Batze the bit builder**
+**Operating Manual · Version 1.2.0** · built by **Batze the bit builder**
 
 *Every track finds its aim.*
 
@@ -92,6 +92,8 @@ The header looks the same in Line and Exchange mode:
 
 Signal path: **Input → Phase → Filter → Gate → EQ ⇄ Compressor → De-esser → Saturation → [analysis] → Adaptive → Pan/Width → Output → Limiter**
 
+Knobs: **double-click** returns to the default value. Drag with the **Shift key** held for fine adjustment (six times the travel). The value below a knob can be clicked and typed.
+
 ### Presets and A/B
 The bar at the top:
 
@@ -105,6 +107,8 @@ Presets set parameters just like turning the knobs – the DAW can undo them.
 
 ### Input
 **Gain** (±24 dB). **Ø L / Ø R** invert the phase (polarity) of the left or right channel – e.g. for snare bottom or kick out.
+
+The **CLIP** lamp in the title turns red as soon as the input signal has reached 0 dBFS and stays on until you click it. **OUTPUT** has the same lamp for the output of the Line (after output gain and limiter).
 
 ### Filter
 **HPF** (20 Hz–1 kHz) and **LPF** (1–20 kHz); the lamps in the title switch them on. Below them the **slope**: 12, 24 or 48 dB/octave.
@@ -133,7 +137,7 @@ The display shows:
 - the **EQ** curve (cream, incl. filters) with draggable points L, 1, 2, H, HP, LP,
 - the **Engine** curve dashed (amber).
 
-Handling: **drag** a point = frequency/gain, **mouse wheel** = Q, **double-click** = 0 dB. The **spectrogram** runs underneath; the fold switch (triangle) **SPECTROGRAM** in the EQ title hides it (the graph gets taller).
+Handling: **drag** a point = frequency/gain, **mouse wheel** = Q, **double-click** = 0 dB. Pointing at or dragging a point shows its values (frequency, gain, Q or slope). **HP** and **LP** are visible as dark points even when switched off: **double-click** switches the filter on or off. The **spectrogram** runs underneath; the fold switch (triangle) **SPECTROGRAM** in the EQ title hides it (the graph gets taller).
 
 ### Output
 In the right-hand column: **Pan**, **Width** (0–200 %, 100 % = unchanged, 0 % = mono) and **Gain** (±24 dB).
@@ -186,18 +190,21 @@ The table lists all Lines:
 |---|---|
 | Line | name, track colour; [EX] = active Exchange, [EX–] = inactive |
 | Role | selected role; "(A)" = detected automatically |
-| Level | LED level chain |
+| Level | LED level chain; red field at the end = overload (0 dBFS reached, click to reset) |
 | GR | compressor gain reduction |
 | Masked | masking before > after (in %) |
 | Masked by | main culprit and frequency range |
-| Adaptive | current processing: gain, HP (high-pass), EQ (deepest cut), [DIR] / [HOLD] |
+| Adaptive | current processing: gain, HP (high-pass), EQ (deepest cut) |
+| D / H / Prio | switches of the Line: **D** = Direct, **H** = Hold, **Prio** = priority (PROG, ++, +, -, - -; click opens the choice) |
+
+The switches operate that Line straight from the overview – also from within another Line (**Mix Overview** button). The Line takes over the change within about 0.1 s; to the DAW it looks like operating the plug-in itself. With many Lines, scroll the list with the **mouse wheel** or the scroll bar on the right.
 
 **Click a row** to select a track: the analyser then shows its masking as heat columns (yellow → red), its spectrum before the engine dashed, its peak dotted and its spectrogram.
 
 ### Analyser, patchbay, VU
 On the left the line list and the analyser, on the right the **DETAILS** column with the patchbay, VU left/right and the spectrogram of the selected track. The list and DETAILS can be folded (triangle); the analyser then uses the space.
 
-- **Analyser**: all tracks as coloured areas, the **sum** as a cream line; with no selection the heat columns show the total occupancy per frequency. With more than 12 lines the tracks are drawn as plain lines (clearer and faster); the selected track keeps its area.
+- **Analyser**: all tracks as coloured areas, the **sum** as a cream line; with no selection the heat columns show the total occupancy per frequency. With more than 12 lines the tracks are drawn as plain lines (clearer and faster); the selected track keeps its area. **Pointing** at a curve highlights it and shows name and role, a **click** selects the track.
 - **Patchbay**: matrix of all Lines – the row is masked by the column. Brighter = stronger. Click to select a track.
 - **VU Left/Right**: master level.
 
@@ -308,7 +315,7 @@ Typical workflow: choose a program → let the song play a few times → compare
 
 ## About AME
 
-**AME – Adaptive Mix Exchange**, version 1.1.1
+**AME – Adaptive Mix Exchange**, version 1.2.0
 
 Built by **Batze the bit builder**.
 

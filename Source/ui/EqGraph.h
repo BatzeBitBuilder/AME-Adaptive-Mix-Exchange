@@ -13,7 +13,8 @@ namespace ame::ui
 {
 // EQ-Grafik der Spur: eigenes Spektrum (vor/nach Engine), manuelle EQ-Kurve mit ziehbaren
 // Punkten, adaptive Kurve der Engine.
-//   Ziehen = Frequenz/Gain, Mausrad = Q (Mid-Bänder), Doppelklick = Gain 0
+//   Ziehen = Frequenz/Gain, Mausrad = Q (Mid-Bänder), Doppelklick = Gain 0 bzw. Hochpass/Tiefpass ein/aus;
+//   beim Zeigen und Ziehen erscheinen die Werte des Punkts
 class EqGraph : public juce::Component
 {
 public:
@@ -21,6 +22,7 @@ public:
 
     void paint (juce::Graphics&) override;
     void mouseMove (const juce::MouseEvent&) override;
+    void mouseExit (const juce::MouseEvent&) override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
@@ -53,6 +55,8 @@ private:
     bool nodeEnabled (const Node&) const;
     juce::Point<float> nodePosition (const Node&) const;
     int hitNode (juce::Point<float>) const;
+    juce::String nodeReadout (int index) const;
+    void paintReadout (juce::Graphics&, int index);
     using ManualKey = std::array<float, 20>;
     static ManualKey manualKey (const ChannelStrip::Params&) noexcept;
     void updateCurves (int steps);

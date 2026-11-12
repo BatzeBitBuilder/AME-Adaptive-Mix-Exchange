@@ -75,6 +75,27 @@ static juce::Button* findButton (juce::Component& root, const juce::String& text
     return nullptr;
 }
 
+template <typename T>
+static T* findChild (juce::Component& root)
+{
+    for (auto* c : root.getChildren())
+    {
+        if (auto* t = dynamic_cast<T*> (c))
+            return t;
+        if (auto* t = findChild<T> (*c))
+            return t;
+    }
+    return nullptr;
+}
+
+// Mausereignis ohne Fenster (für mouseMove / mouseDown / mouseDoubleClick einer Komponente)
+static juce::MouseEvent mouseAt (juce::Component& c, juce::Point<float> pos, int clicks = 1)
+{
+    const auto now = juce::Time::getCurrentTime();
+    return { juce::Desktop::getInstance().getMainMouseSource(), pos, juce::ModifierKeys(), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+             &c, &c, now, pos, now, clicks, false };
+}
+
 static void snapshot (juce::Component& c, const juce::File& f)
 {
     auto img = c.createComponentSnapshot (c.getLocalBounds());
@@ -1109,6 +1130,60 @@ int main (int argc, char** argv)
         snapshot (*ed, outDir.getChildFile ("ui_rack_deesser.png"));
     }
 
+    // --- 1.2.0: Bedienung mit der Maus – EQ-Grafik (Werteanzeige, Hochpass per Doppelklick), Analyzer (Kurve wählen) ---
+    {
+        auto frames = [&] (int n) { for (int f = 0; f < n; ++f) { runAll (1); juce::MessageManager::getInstance()->runDispatchLoopUntil (33); } };
+
+        setParam (*bass, pid::hpfOn, 0.0f);
+        {
+            std::unique_ptr<juce::AudioProcessorEditor> ed (bass->createEditor());
+            frames (8);
+            auto* graph = findChild<ui::EqGraph> (*ed);
+            CHECK (graph != nullptr);
+            int nodesFound = 0;
+            bool hpfSwitched = false;
+            if (graph != nullptr)
+            {
+                bool wasOnNode = false;
+                for (float y = 3.0f; y < (float) graph->getHeight() && ! hpfSwitched; y += 5.0f)
+                    for (float x = 3.0f; x < (float) graph->getWidth() && ! hpfSwitched; x += 5.0f)
+                    {
+                        graph->mouseMove (mouseAt (*graph, { x, y }));
+                        const bool onNode = graph->getMouseCursor() == juce::MouseCursor::DraggingHandCursor;
+                        if (onNode && ! wasOnNode)
+                        {
+                            ++nodesFound;
+                            // Doppelklick: Band = Gain 0, ausgeschalteter Hochpass = ein
+                            graph->mouseDoubleClick (mouseAt (*graph, { x, y }, 2));
+                            hpfSwitched = bass->apvts.getRawParameterValue (pid::hpfOn)->load() > 0.5f;
+                        }
+                        wasOnNode = onNode;
+                    }
+            }
+            CHECK (nodesFound > 0);
+            CHECK (hpfSwitched);   // der ausgeschaltete Hochpass ist in der Grafik greifbar
+            frames (3);
+            snapshot (*ed, outDir.getChildFile ("ui_eq_readout.png"));
+            std::cout << "EQ-Grafik: Hochpass per Doppelklick eingeschaltet (" << nodesFound << " Punkt(e) abgesucht)\n";
+        }
+        {
+            std::unique_ptr<juce::AudioProcessorEditor> ed (master->createEditor());
+            frames (8);
+            auto* ov = findChild<ui::MixOverview> (*ed);
+            CHECK (ov != nullptr);
+            bool onCurve = false;
+            if (ov != nullptr)
+                for (float y = (float) ov->getHeight() * 0.45f; y < (float) ov->getHeight() - 30.0f && ! onCurve; y += 4.0f)
+                    for (float x = 60.0f; x < (float) ov->getWidth() * 0.6f && ! onCurve; x += 4.0f)
+                    {
+                        ov->mouseMove (mouseAt (*ov, { x, y }));
+                        onCurve = ov->getMouseCursor() == juce::MouseCursor::PointingHandCursor;
+                    }
+            CHECK (onCurve);   // Kurve unter der Maus erkannt (Namensschild)
+            snapshot (*ed, outDir.getChildFile ("ui_overview_hover.png"));
+        }
+    }
+
     vocal.reset();
     CHECK (kick->getHub().getNumInstances() == 3);
 
@@ -1191,6 +1266,66 @@ int main (int argc, char** argv)
         }
         std::cout << "Anzeige-Frequenzgang schnell/bisher: max. Abweichung " << maxDiff << " dB\n";
         CHECK (maxDiff < 1.0e-3f);
+    }
+
+    // --- 1.2.0: Fernbedienung je Line aus der Mix-Übersicht, Clip-Merker ---
+    {
+        auto line = std::make_unique<AmeProcessor>();
+        line->setPlayConfigDetails (2, 2, 48000.0, 512);
+        line->prepareToPlay (48000.0, 512);
+        auto& hub = line->getHub();
+        const int slot = line->getSlot();
+        auto value = [&] (const char* id) { return line->apvts.getRawParameterValue (id)->load(); };
+        auto pump = [] { juce::MessageManager::getInstance()->runDispatchLoopUntil (250); };
+
+        hub.sendRemote (slot, MixHub::remoteHold, 1.0f);
+        pump();
+        CHECK (value (pid::adaptFreeze) > 0.5f);
+        hub.sendRemote (slot, MixHub::remoteHold, 0.0f);
+        pump();
+        CHECK (value (pid::adaptFreeze) < 0.5f);
+        hub.sendRemote (slot, MixHub::remoteDirect, 1.0f);
+        pump();
+        CHECK (value (pid::adaptBypass) > 0.5f);
+        hub.sendRemote (slot, MixHub::remotePriority, 3.0f);
+        pump();
+        CHECK (juce::roundToInt (value (pid::priority)) == 3);
+
+        // Zustand kommt über den Hub zurück (Anzeige in der Liste); Eingang über 0 dBFS setzt den Merker
+        juce::AudioBuffer<float> buf (2, 512);
+        juce::MidiBuffer midi;
+        auto run = [&] (float amp)
+        {
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < 512; ++i)
+                    buf.setSample (ch, i, amp * (float) std::sin (0.05 * i));
+            line->processBlock (buf, midi);
+        };
+        run (0.5f);
+        bool found = false;
+        for (const auto& t : hub.getSnapshot())
+            if (t.slot == slot)
+            {
+                found = true;
+                CHECK (t.direct && t.priorityIndex == 3 && ! t.frozen);
+                CHECK (! t.clipIn && ! t.clipOut);
+            }
+        CHECK (found);
+        setParam (*line, pid::outGain, 12.0f);   // Ausgang sicher über 0 dBFS (der Strip selbst kann Spitzen dämpfen)
+        for (int i = 0; i < 8; ++i)
+            run (1.5f);
+        CHECK (hub.getAudioData (slot)->clipIn.load() && hub.getAudioData (slot)->clipOut.load());
+        run (0.1f);
+        CHECK (hub.getAudioData (slot)->clipIn.load());   // bleibt, bis zurückgesetzt wird
+        hub.resetClip (slot);
+        run (0.1f);
+        CHECK (! hub.getAudioData (slot)->clipIn.load() && ! hub.getAudioData (slot)->clipOut.load());
+
+        // Exchange-Instanzen reagieren nicht auf die Fernbedienung
+        setParam (*line, pid::mode, (float) InstanceMode::Master);
+        hub.sendRemote (slot, MixHub::remoteHold, 1.0f);
+        pump();
+        CHECK (value (pid::adaptFreeze) < 0.5f);
     }
 
     std::cout << (failures == 0 ? "OK" : "FEHLER: " + std::to_string (failures)) << "\n";

@@ -41,9 +41,32 @@ public:
     Role getCurrentRole() const noexcept { return currentRole; }
 
 private:
+    // Regler: Shift beim Ziehen = feine Einstellung (6-facher Weg); Doppelklick = Standardwert (über das Attachment)
+    struct FineSlider : juce::Slider
+    {
+        using juce::Slider::Slider;
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            setMouseDragSensitivity (e.mods.isShiftDown() ? 1500 : 250);
+            juce::Slider::mouseDown (e);
+        }
+    };
+
+    // Haltende Übersteuerungs-Lampe (>= 0 dBFS); Klick setzt zurück
+    struct ClipLamp : juce::Component, juce::SettableTooltipClient
+    {
+        std::function<void()> onReset;
+        void setOn (bool shouldBeOn) { if (on != shouldBeOn) { on = shouldBeOn; repaint(); } }
+        bool isOn() const noexcept { return on; }
+        void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent&) override { if (onReset) onReset(); }
+    private:
+        bool on = false;
+    };
+
     struct Knob
     {
-        juce::Slider slider { juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::TextBoxBelow };
+        FineSlider slider { juce::Slider::RotaryHorizontalVerticalDrag, juce::Slider::TextBoxBelow };
         juce::Label label;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
     };
@@ -147,6 +170,7 @@ private:
     float hpfHz = 0.0f, gainDb = 0.0f;
     bool engineAlive = false, frozen = false, bypassed = false, rawMonitor = false, noEngineMonitor = false, exchangePresent = false;
 
+    ClipLamp inputClip, outputClip;
     VuMeter levelVu { {}, VuMeter::Mode::Level };
     VuMeter grVu { {}, VuMeter::Mode::GainReduction };
     Waterfall waterfall;
