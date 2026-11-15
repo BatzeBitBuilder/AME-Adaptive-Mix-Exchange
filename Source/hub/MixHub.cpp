@@ -20,6 +20,10 @@
  #include <sys/mman.h>
  #include <sys/stat.h>
  #include <unistd.h>
+ #if JUCE_MAC
+  #include <libproc.h>
+  #include <sys/proc_info.h>
+ #endif
 #endif
 
 #include <map>
@@ -132,6 +136,20 @@ juce::String findSessionKey()
             break;
         pid = parent;
     }
+   #elif JUCE_MAC
+    for (int depth = 0; depth < 8; ++depth)
+    {
+        proc_bsdinfo info {};
+        if (proc_pidinfo ((int) pid, PROC_PIDTBSDINFO, 0, &info, (int) sizeof (info)) != (int) sizeof (info))
+            break;
+        char path[PROC_PIDPATHINFO_MAXSIZE] {};
+        const auto exe = proc_pidpath ((int) pid, path, sizeof (path)) > 0
+                           ? juce::File (juce::String::fromUTF8 (path)).getFileName()
+                           : juce::String (info.pbi_name);
+        if (! isHelperProcessName (exe) || info.pbi_ppid <= 1)
+            break;
+        pid = (uint32_t) info.pbi_ppid;
+    }
    #endif
 
     return juce::String (pid);
@@ -208,12 +226,21 @@ public:
         // Timeout statt Hänger, falls ein anderer Prozess blockiert; aufgegebene Sperre (Absturz) gilt als erhalten
         WaitForSingleObject (mutex, 2000);
        #else
+       #if JUCE_LINUX || JUCE_BSD
         if (pthread_mutex_lock (&header->mutex) == EOWNERDEAD)
-           #if JUCE_LINUX || JUCE_BSD
             pthread_mutex_consistent (&header->mutex);
-           #else
-            {}
-           #endif
+       #else
+        // macOS kennt keine robusten Mutexe: Timeout statt Hänger (wie unter Windows), falls ein
+        // abgestürzter Prozess die Sperre hält; danach nur noch ein kurzer Versuch
+        holdsLock = false;
+        const auto limit = lockAbandoned ? 20u : 2000u;
+        for (const auto t0 = juce::Time::getMillisecondCounter();;)
+        {
+            if (pthread_mutex_trylock (&header->mutex) == 0) { holdsLock = true; lockAbandoned = false; return; }
+            if (juce::Time::getMillisecondCounter() - t0 > limit) { lockAbandoned = true; return; }
+            juce::Thread::sleep (1);
+        }
+       #endif
        #endif
     }
 
@@ -222,8 +249,12 @@ public:
         if (local != nullptr) { localLock.exit(); return; }
        #if JUCE_WINDOWS
         ReleaseMutex (mutex);
-       #else
+       #elif JUCE_LINUX || JUCE_BSD
         pthread_mutex_unlock (&header->mutex);
+       #else
+        if (holdsLock)
+            pthread_mutex_unlock (&header->mutex);
+        holdsLock = false;
        #endif
     }
 
@@ -248,6 +279,12 @@ private:
             return false;
        #else
         shmName = "/" + baseName;
+       #if JUCE_MAC
+        // macOS: POSIX-Namen höchstens 31 Zeichen (PSHMNAMLEN) → Sitzung als Hash
+        if (shmName.length() > 30)
+            shmName = "/AME" + juce::String (kLayoutVersion) + "_"
+                      + juce::String::toHexString ((juce::int64) baseName.hashCode64()).substring (0, 16);
+       #endif
         const int fd = shm_open (shmName.toRawUTF8(), O_CREAT | O_RDWR, 0600);
         if (fd < 0)
             return false;
@@ -344,6 +381,7 @@ private:
     HANDLE mapping = nullptr, mutex = nullptr;
    #else
     juce::String shmName;
+    bool holdsLock = false, lockAbandoned = false;   // nur macOS (Sperre ohne EOWNERDEAD)
    #endif
 };
 

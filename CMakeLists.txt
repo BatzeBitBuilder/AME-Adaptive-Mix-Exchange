@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(AME VERSION 1.2.0 LANGUAGES C CXX)
+project(AME VERSION 1.3.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -36,13 +36,14 @@ juce_add_plugin(AME
     PLUGIN_CODE                Mtmx   # keep: plug-in ID of saved projects
     PRODUCT_NAME               "AME Adaptive Mix Exchange"
     BUNDLE_ID                  com.batzebitbuilder.ame
-    FORMATS                    VST3
+    FORMATS                    VST3 AU   # AU nur macOS (JUCE lässt es sonst weg)
     IS_SYNTH                   FALSE
     NEEDS_MIDI_INPUT           FALSE
     NEEDS_MIDI_OUTPUT          FALSE
     IS_MIDI_EFFECT             FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     VST3_CATEGORIES            Fx Mixing EQ Dynamics
+    AU_MAIN_TYPE               kAudioUnitType_Effect
     COPY_PLUGIN_AFTER_BUILD    FALSE)
 
 target_sources(AME PRIVATE

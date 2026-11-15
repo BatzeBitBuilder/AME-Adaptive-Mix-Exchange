@@ -5,7 +5,7 @@
 
 #include <juce_core/juce_core.h>
 
-// Benutzer-Einstellungen (global für alle Instanzen): %APPDATA%\AME\AME.settings
+// Benutzer-Einstellungen (global für alle Instanzen): %APPDATA%\AME\AME.settings (macOS: ~/Library/Application Support/AME)
 namespace ame::settings
 {
 juce::String get (const juce::String& key, const juce::String& fallback = {});
