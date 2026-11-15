@@ -1,8 +1,8 @@
 # AME – Adaptive Mix Exchange · Copyright (C) 2026 Batze the bit builder
 # SPDX-License-Identifier: AGPL-3.0-only
 #
-# Baut das VST3-Plugin unter Windows, führt den Smoke-Test aus und
-# veröffentlicht ein GitHub-Release "v<CMake-Version>" mit ZIP-Anhang:
+# Baut das Plugin unter Windows (VST3) und macOS (VST3 + AU, Universal Binary, ad hoc signiert),
+# führt jeweils den Smoke-Test aus und veröffentlicht ein GitHub-Release "v<CMake-Version>" mit beiden ZIPs:
 #  - bei einem Tag "v*" (Tag muss zur CMake-Version passen) oder
 #  - manuell (Actions → Release → Run workflow, "release" anhaken).
 
@@ -24,10 +24,13 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    outputs:
+      tag: ${{ steps.ver.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Version ermitteln
+        id: ver
         shell: pwsh
         run: |
           $line = Select-String -Path CMakeLists.txt -Pattern 'project\(AME VERSION ([0-9.]+)'
@@ -38,6 +41,7 @@ jobs:
           }
           "AME_VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append
           "AME_TAG=v$ver" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "tag=v$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       # Neuestes Visual Studio des Runners, statische MSVC-Laufzeit (keine Redistributable nötig)
       - name: Konfigurieren
@@ -72,13 +76,80 @@ jobs:
           name: ame-win64-vst3
           path: ${{ env.AME_ZIP }}
 
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version ermitteln
+        run: |
+          ver=$(sed -nE 's/^project\(AME VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
+          echo "AME_VERSION=$ver" >> "$GITHUB_ENV"
+
+      # Universal Binary (Apple Silicon + Intel), ab macOS 11
+      - name: Konfigurieren
+        run: cmake -B build -G Xcode -DAME_BUILD_TESTS=ON "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+
+      - name: Bauen
+        run: cmake --build build --config Release --parallel -- -quiet
+
+      - name: Smoke-Test
+        run: |
+          mkdir -p smoke
+          exe=$(find build -type f -perm -u+x -name AMESmokeTest -path '*Release*' | head -1)
+          "$exe" "$PWD/smoke"
+
+      # ohne Apple-Developer-ID: ad hoc signieren (Pflicht auf Apple Silicon), Quarantäne entfernt der Nutzer
+      - name: Signieren (ad hoc) und Paket schnüren
+        run: |
+          name="AME-Adaptive-Mix-Exchange-$AME_VERSION-macos-vst3-au"
+          dst="dist/$name"
+          mkdir -p "$dst/Manual"
+          cp -R "build/AME_artefacts/Release/VST3/AME Adaptive Mix Exchange.vst3" "$dst/"
+          cp -R "build/AME_artefacts/Release/AU/AME Adaptive Mix Exchange.component" "$dst/"
+          for b in "$dst"/*.vst3 "$dst"/*.component; do
+            codesign --force --deep --sign - "$b"
+            codesign --verify --deep --strict "$b"
+            lipo -info "$b/Contents/MacOS/AME Adaptive Mix Exchange"
+          done
+          cp LICENSE THIRD_PARTY_NOTICES.md README.md "$dst/"
+          cp docs/manual/handbuch_de.md docs/manual/manual_en.md "$dst/Manual/"
+          (cd dist && ditto -c -k --keepParent "$name" "$name.zip")
+          echo "AME_ZIP=dist/$name.zip" >> "$GITHUB_ENV"
+
+      - name: AU-Validierung
+        run: |
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R "build/AME_artefacts/Release/AU/AME Adaptive Mix Exchange.component" ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          sleep 3
+          auval -a | grep -i Tbnn || true
+          auval -strict -v aufx Mtmx Tbnn
+
+      - name: Artefakt
+        uses: actions/upload-artifact@v4
+        with:
+          name: ame-macos-vst3-au
+          path: ${{ env.AME_ZIP }}
+
+  release:
+    needs: [ windows, macos ]
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
       - name: Release veröffentlichen
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.release
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          AME_TAG: ${{ needs.windows.outputs.tag }}
         run: |
-          $notes = ".github/release-notes/$env:AME_TAG.md"
-          $ghArgs = @("$env:AME_TAG", "$env:AME_ZIP", "--title", "AME $env:AME_TAG", "--target", "${{ github.sha }}")
-          if (Test-Path $notes) { $ghArgs += @("--notes-file", $notes) } else { $ghArgs += "--generate-notes" }
-          gh release create @ghArgs
+          ls -l dist
+          notes=".github/release-notes/$AME_TAG.md"
+          if [ -f "$notes" ]; then n=(--notes-file "$notes"); else n=(--generate-notes); fi
+          gh release create "$AME_TAG" dist/*.zip --title "AME $AME_TAG" --target "${{ github.sha }}" "${n[@]}"

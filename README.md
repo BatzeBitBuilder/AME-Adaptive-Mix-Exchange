@@ -2,7 +2,7 @@
 
 *Every track finds its aim.*
 
-A networked, adaptive channel strip plug-in (VST3, Windows x64) by **Batze the bit builder**.
+A networked, adaptive channel strip plug-in (VST3 for Windows x64 and macOS, AU for macOS) by **Batze the bit builder**.
 
 Put AME on your tracks (**Line**) and one instance on the master bus (**Exchange**). All instances in the project find each other automatically. The Exchange listens to every line, detects which tracks mask each other and continuously gives every track its place in the frequency spectrum and in the level balance – while each Line remains a full channel strip you control by hand.
 
@@ -21,13 +21,19 @@ Put AME on your tracks (**Line**) and one instance on the master bus (**Exchange
 
 ## Compatibility
 - Works in **all common VST3 hosts on Windows (64-bit)**, e.g. Ableton Live, Cubase/Nuendo, Studio One, Reaper, Bitwig Studio, FL Studio and Cakewalk.
-- Tested with Ableton Live.
+- **macOS 11 or later** (Universal Binary: Apple Silicon and Intel) as **VST3 and AU** (Logic Pro, GarageBand, …). Not notarized – see installation.
+- Tested with Ableton Live on Windows; the macOS build is new and has seen little testing so far.
 - Instances communicate via shared memory, so they also find each other when the DAW runs plug-ins in separate processes.
-- Not available: AU (Logic), AAX (Pro Tools), macOS and Linux builds.
+- Not available: AAX (Pro Tools), Linux builds.
 
 ## Installation
 1. Download the ZIP from [Releases](../../releases) and unzip it.
-2. Copy `AME Adaptive Mix Exchange.vst3` to the system VST3 folder `C:\Program Files\Common Files\VST3\` (administrator rights required).
+2. **Windows**: copy `AME Adaptive Mix Exchange.vst3` to the system VST3 folder `C:\Program Files\Common Files\VST3\` (administrator rights required).
+   **macOS**: copy `AME Adaptive Mix Exchange.vst3` to `/Library/Audio/Plug-Ins/VST3/` and `AME Adaptive Mix Exchange.component` to `/Library/Audio/Plug-Ins/Components/`. The plug-in is ad-hoc signed but not notarized, so remove the download quarantine once:
+   ```sh
+   sudo xattr -dr com.apple.quarantine "/Library/Audio/Plug-Ins/VST3/AME Adaptive Mix Exchange.vst3"
+   sudo xattr -dr com.apple.quarantine "/Library/Audio/Plug-Ins/Components/AME Adaptive Mix Exchange.component"
+   ```
 3. Rescan plug-ins in your DAW. AME appears under the vendor **Batze the bit builder**.
 
 ## Quick start
@@ -40,10 +46,10 @@ Put AME on your tracks (**Line**) and one instance on the master bus (**Exchange
 Without an Exchange every Line works as a normal channel strip without adaptive processing. Details: see the [manual](docs/manual/manual_en.md).
 
 ## Language and settings
-Switch the interface language with **DE / EN** in the header; the choice applies to all instances immediately. Settings and user presets are stored per user in `%APPDATA%\AME\`. Parameter names shown in the DAW are always English.
+Switch the interface language with **DE / EN** in the header; the choice applies to all instances immediately. Settings and user presets are stored per user in `%APPDATA%\AME\` (macOS: `~/Library/Application Support/AME/`). Parameter names shown in the DAW are always English.
 
 ## Building from source
-Requirements: Windows, Visual Studio 2022 or newer with the “Desktop development with C++” workload, CMake ≥ 3.22, Git.
+Requirements: Windows with Visual Studio 2022 or newer (“Desktop development with C++” workload), or macOS with Xcode; CMake ≥ 3.22, Git.
 
 ```bat
 git clone https://github.com/BatzeBitBuilder/AME-Adaptive-Mix-Exchange.git
@@ -54,6 +60,13 @@ cmake --build build --config Release
 
 JUCE 8.0.10 is downloaded automatically on first configure (or use a local checkout: `-DAME_JUCE_PATH=<path-to-JUCE>`).
 Result: `build\AME_artefacts\Release\VST3\AME Adaptive Mix Exchange.vst3`
+
+macOS (Universal Binary, VST3 + AU):
+```sh
+cmake -B build -G Xcode "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+cmake --build build --config Release
+```
+Result: `build/AME_artefacts/Release/VST3/…vst3` and `build/AME_artefacts/Release/AU/…component`
 
 ### Smoke test (no DAW required)
 ```bat

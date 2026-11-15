@@ -1,6 +1,6 @@
 # AME – Adaptive Mix Exchange
 
-**Handbuch · Version 1.2.0** · entwickelt von **Batze the bit builder**
+**Handbuch · Version 1.3.0** · entwickelt von **Batze the bit builder**
 
 *Every track finds its aim.* – Jede Spur bekommt ihren Platz.
 
@@ -21,7 +21,9 @@ AME ist ein vernetzter Channelstrip (VST3). Jede Instanz auf einer Spur heißt *
 
 ## Installation
 
-1. `AME Adaptive Mix Exchange.vst3` nach `C:\Program Files\Common Files\VST3\` kopieren (Administratorrechte nötig).
+1. Plug-in kopieren:
+   - **Windows**: `AME Adaptive Mix Exchange.vst3` nach `C:\Program Files\Common Files\VST3\` (Administratorrechte nötig).
+   - **macOS**: `AME Adaptive Mix Exchange.vst3` nach `/Library/Audio/Plug-Ins/VST3/` und (für Logic, GarageBand u. a.) `AME Adaptive Mix Exchange.component` nach `/Library/Audio/Plug-Ins/Components/`. Für nur einen Benutzer gehen auch die gleichnamigen Ordner unter `~/Library/Audio/Plug-Ins/`. AME ist nicht bei Apple notarisiert: Vor dem ersten Start einmal im Terminal die Download-Sperre entfernen, z. B. `sudo xattr -dr com.apple.quarantine "/Library/Audio/Plug-Ins/VST3/AME Adaptive Mix Exchange.vst3"` (für die .component genauso). Sonst meldet macOS, das Plug-in sei beschädigt oder könne nicht überprüft werden.
 2. Plug-ins in der DAW neu scannen lassen (der System-VST3-Ordner muss in den Plug-in-Einstellungen enthalten sein).
 3. AME erscheint unter dem Hersteller **Batze the bit builder**.
 
@@ -33,8 +35,9 @@ AME ist ein vernetzter Channelstrip (VST3). Jede Instanz auf einer Spur heißt *
 | Reaper | Options → Preferences → Plug-ins → VST → Re-scan |
 | Bitwig Studio | Settings → Locations → Plug-ins (scannt automatisch) |
 | FL Studio | Options → Manage plugins → Find installed plugins |
+| Logic Pro (macOS, AU) | Settings → Plug-in Manager → Reset & Rescan Selection |
 
-**Kompatibilität:** AME läuft in allen gängigen VST3-Hosts unter Windows 64-bit. Die Instanzen finden sich über gemeinsamen Speicher der DAW-Sitzung – auch dann, wenn die DAW Plug-ins in getrennten Prozessen betreibt (Sandbox, Bridge, z. B. Bitwig „Individually“). Getestet mit Ableton Live.
+**Kompatibilität:** AME läuft in allen gängigen VST3-Hosts unter Windows 64-bit und macOS ab 11 (Apple Silicon und Intel, VST3 und AU). Die Instanzen finden sich über gemeinsamen Speicher der DAW-Sitzung – auch dann, wenn die DAW Plug-ins in getrennten Prozessen betreibt (Sandbox, Bridge, z. B. Bitwig „Individually“). Getestet mit Ableton Live unter Windows; der macOS-Build ist neu und noch wenig erprobt.
 
 ## Schnellstart
 
@@ -99,7 +102,7 @@ Die Leiste oben:
 
 - **Preset**: Werkspresets je Rolle (Startwerte für Filter, EQ, Gate, Kompressor, De-Esser, Sättigung) und **eigene Presets**. Werkspresets lassen Input, Phase, Pan, Width, Output und Limiter unverändert.
 - **Preset der Rolle**: lädt das Werkspreset der eingestellten bzw. per Auto-Kennung erkannten Rolle.
-- **Speichern**: aktuelle Einstellungen als eigenes Preset ablegen (gleicher Name überschreibt). Eigene Presets liegen in `%APPDATA%\AME\Presets` und stehen in allen Projekten zur Verfügung.
+- **Speichern**: aktuelle Einstellungen als eigenes Preset ablegen (gleicher Name überschreibt). Eigene Presets liegen in `%APPDATA%\AME\Presets` (macOS: `~/Library/Application Support/AME/Presets`) und stehen in allen Projekten zur Verfügung.
 - **Löschen**: das geladene eigene Preset löschen.
 - **A / B**: zwei Einstellungen vergleichen. Beim ersten Wechsel startet B als Kopie von A. **A→B** kopiert die aktive Einstellung in den anderen Platz. Beide werden im Projekt gespeichert.
 
@@ -161,7 +164,7 @@ Die LED-Anzeige unten zeigt die aktuelle Absenkung je Oktavband (31 Hz–16 kHz,
 - **Typenschild**: Version, Line-Nummer, Spurname (aus der DAW), Rolle und aktives Programm.
 
 ### Fenstergröße und Klappbereiche
-Das Fenster ist im Querformat angelegt (Basis 1400 × 760) und passt damit auch auf Full-HD-Bildschirme (1080p, auch mit 125 % Windows-Skalierung). An der Ecke unten rechts lässt es sich stufenlos von 50 bis 200 % skalieren, alternativ über die Prozent-Taste im Kopf (neben HANDBUCH). Die zuletzt gewählte Größe gilt für alle AME-Fenster. Ist das Fenster größer als der Monitor, auf dem es liegt (z. B. Größe auf einem Ultrawide gewählt, dann auf einen 1080p-Monitor geschoben), verkleinert AME es automatisch.
+Das Fenster ist im Querformat angelegt (Basis 1400 × 760) und passt damit auch auf Full-HD-Bildschirme (1080p, auch mit 125 % Skalierung unter Windows). An der Ecke unten rechts lässt es sich stufenlos von 50 bis 200 % skalieren, alternativ über die Prozent-Taste im Kopf (neben HANDBUCH). Die zuletzt gewählte Größe gilt für alle AME-Fenster. Ist das Fenster größer als der Monitor, auf dem es liegt (z. B. Größe auf einem Ultrawide gewählt, dann auf einen 1080p-Monitor geschoben), verkleinert AME es automatisch.
 
 Einklappbar (Dreieck nach unten = offen, nach rechts = eingeklappt): an der Line **ADAPTIV** und das **Spektrogramm**, im Exchange die **Line-Liste** und die rechte Spalte **DETAILS** (Patchfeld, VU, Spektrogramm). Der Platz geht an EQ bzw. Analyzer. Der Zustand gilt für alle AME-Fenster und wird gespeichert.
 
@@ -315,11 +318,11 @@ Typischer Ablauf: Programm wählen → Song einige Male durchlaufen lassen → m
 
 ## Über AME
 
-**AME – Adaptive Mix Exchange**, Version 1.2.0
+**AME – Adaptive Mix Exchange**, Version 1.3.0
 
 Entwickelt von **Batze the bit builder**.
 
-- Framework: JUCE 8 (C++20), Format VST3, Windows (getestet mit Ableton Live).
+- Framework: JUCE 8 (C++20), Formate VST3 (Windows, macOS) und AU (macOS), getestet mit Ableton Live unter Windows.
 - Schriften: Abril Fatface, Bebas Neue, Courier Prime – SIL Open Font License.
 - **Lizenz: GNU Affero General Public License v3 (AGPLv3)** – freie, offene Software. Du darfst AME nutzen, verändern und weitergeben, auch kommerziell. Wer eine veränderte Fassung weitergibt, muss deren Quellcode ebenfalls unter AGPLv3 offenlegen. AME wird ohne jede Gewährleistung bereitgestellt.
 - Quellcode: [github.com/BatzeBitBuilder/AME-Adaptive-Mix-Exchange](https://github.com/BatzeBitBuilder/AME-Adaptive-Mix-Exchange)
