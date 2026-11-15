@@ -289,9 +289,14 @@ private:
         if (fd < 0)
             return false;
 
+        // macOS rundet die Größe auf ganze Seiten auf und erlaubt ftruncate nur einmal
+        // (zwei gleichzeitige Anleger: der zweite scheitert dort → Größe erneut lesen)
         struct stat st {};
-        const bool sizeOk = fstat (fd, &st) == 0
-                            && (st.st_size == (off_t) kTotalSize || (st.st_size == 0 && ftruncate (fd, (off_t) kTotalSize) == 0));
+        bool sizeOk = fstat (fd, &st) == 0
+                      && (st.st_size >= (off_t) kTotalSize
+                          || (st.st_size == 0 && ftruncate (fd, (off_t) kTotalSize) == 0));
+        if (! sizeOk)
+            sizeOk = fstat (fd, &st) == 0 && st.st_size >= (off_t) kTotalSize;
         if (sizeOk)
             view = mmap (nullptr, kTotalSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
         ::close (fd);

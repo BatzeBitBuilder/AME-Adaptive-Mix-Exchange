@@ -3,7 +3,7 @@
 ## 1.3.0 – 2026-11-15 (macOS)
 - **macOS build**: VST3 and **AU** (Logic Pro, GarageBand, …) as Universal Binary for Apple Silicon and Intel, macOS 11 or later. Ad-hoc signed, not notarized – remove the download quarantine once (see manual, installation)
 - Settings and user presets on macOS in `~/Library/Application Support/AME/`
-- Hub on macOS: shared-memory name shortened to the system limit (31 characters); the cross-process lock times out after 2 s instead of hanging if a crashed process still holds it (macOS has no robust mutexes)
+- Hub on macOS: shared-memory name shortened to the system limit (31 characters), page-rounded size accepted, session found through plug-in host processes (sandbox/bridge); the cross-process lock times out after 2 s instead of hanging if a crashed process still holds it (macOS has no robust mutexes)
 - Release workflow builds Windows and macOS (with smoke test and AU validation) and publishes both ZIPs
 - No changes to sound, parameters or hub layout on Windows
 
