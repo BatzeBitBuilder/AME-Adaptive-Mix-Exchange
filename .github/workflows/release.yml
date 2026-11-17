@@ -77,7 +77,7 @@ jobs:
           path: ${{ env.AME_ZIP }}
 
   macos:
-    runs-on: macos-latest
+    runs-on: macos-15-intel   # Intel-Runner (arm64-Runner oft ohne Kapazität); baut trotzdem Universal Binary
     steps:
       - uses: actions/checkout@v4
 
